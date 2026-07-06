@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(uuid())
+  minecraftUuid String?   @unique
+  username      String    @unique
+  balance       Float     @default(0.0)
+  role          Role      @default(PLAYER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  transactions  Transaction[]
+  bets          Bet[]
+}
+
+model Transaction {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  amount    Float
+  type      TxType
+  status    TxStatus @default(PENDING)
+  createdAt DateTime @default(now())
+}
+
+model Bet {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  game      String   // "slots", "crash", "roulette"
+  amount    Float
+  result    Float    // amount won (0 if lost)
+  createdAt DateTime @default(now())
+}
+
+enum Role {
+  PLAYER
+  ADMIN
+}
+
+enum TxType {
+  DEPOSIT
+  WITHDRAWAL
+}
+
+enum TxStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+}
