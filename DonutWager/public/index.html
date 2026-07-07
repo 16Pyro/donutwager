@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DonutWager — Minecraft casino</title>
+<meta name="description" content="DonutWager - the DonutSMP community casino. Cases, battles, mines, towers, coinflip, blackjack and dice. Provably fair.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+<link rel="icon" href="/img/donut.svg" type="image/svg+xml">
+</head>
+<body>
+
+<!-- ======== SIDEBAR ======== -->
+<aside class="sidebar">
+  <a class="brand" href="#/" aria-label="DonutWager home">
+    <img src="/img/donut.svg" alt="" class="brand-donut">
+    <span class="brand-name">DONUT<em>WAGER</em></span>
+  </a>
+
+  <p class="side-label">Games</p>
+  <nav class="sidenav">
+    <a href="#/" data-nav="home"><img class="nav-ico" src="/img/items/grass_block.png" alt="">Home</a>
+    <a href="#/cases" data-nav="cases"><img class="nav-ico" src="/img/items/barrel.png" alt="">Cases</a>
+    <a href="#/mines" data-nav="mines"><img class="nav-ico" src="/img/items/tnt.png" alt="">Mines</a>
+    <a href="#/towers" data-nav="towers"><img class="nav-ico" src="/img/items/ladder.png" alt="">Towers</a>
+    <a href="#/coinflip" data-nav="coinflip"><img class="nav-ico" src="/img/items/gold_nugget.png" alt="">Coinflip</a>
+    <a href="#/blackjack" data-nav="blackjack"><img class="nav-ico" src="/img/items/filled_map.png" alt="">Blackjack</a>
+    <a href="#/dice" data-nav="dice"><img class="nav-ico" src="/img/items/rabbit_foot.png" alt="">Dice</a>
+    <a href="#/chicken" data-nav="chicken"><img class="nav-ico" src="/img/items/chicken.png" alt="">Chicken</a>
+  </nav>
+
+  <p class="side-label">Other</p>
+  <nav class="sidenav">
+    <a href="#/daily" data-nav="daily"><img class="nav-ico" src="/img/items/golden_apple.png" alt="">Daily Case</a>
+    <a href="#/deposit" data-nav="deposit"><img class="nav-ico" src="/img/items/emerald.png" alt="">Deposit</a>
+    <a href="#/fair" data-nav="fair"><img class="nav-ico" src="/img/items/writable_book.png" alt="">Fairness</a>
+  </nav>
+
+  <div class="side-foot">
+    <p>DonutWager · for DonutSMP</p>
+  </div>
+</aside>
+
+<!-- ======== MAIN COLUMN ======== -->
+<div class="main-col">
+  <header class="topbar">
+    <button class="btn btn-ghost btn-small burger" id="burger">☰</button>
+    <div class="topbar-spacer"></div>
+    <div class="wallet hidden" id="wallet">
+      <span class="wallet-coin"></span>
+      <span id="balance">0.00</span>
+    </div>
+    <button class="btn btn-ghost btn-small" id="sound-toggle" title="Toggle sounds">🔊</button>
+    <button class="btn btn-ghost btn-small" id="chat-toggle" title="Toggle chat">💬</button>
+    <button class="btn btn-green" id="mc-link-btn">⛏ Link MC Account</button>
+    <div id="user-menu" class="hidden">
+      <span class="user-name" id="username-label"></span>
+      <button class="btn btn-ghost btn-small" id="deposit-btn">⬆ Deposit</button>
+      <button class="btn btn-ghost btn-small" id="withdraw-btn">⬇ Withdraw</button>
+      <button class="btn btn-ghost btn-small" id="logout-btn">Log out</button>
+    </div>
+  </header>
+
+<main id="app">
+
+  <!-- ======== HOME ======== -->
+  <section class="page" data-page="home">
+    <div class="hero">
+      <div class="hero-copy">
+        <p class="hero-kicker">the donutsmp casino</p>
+        <h1>Bet your blocks.</h1>
+        <p class="hero-sub">Seven games, zero trust required — every roll is provably fair
+          and settled on our servers. No signup needed: jump in with 100B coins and start mining.</p>
+        <div class="hero-actions">
+          <a class="btn btn-green btn-big" href="#/cases">Open a case</a>
+          <a class="btn btn-ghost btn-big" href="#/fair">How fairness works</a>
+        </div>
+      </div>
+      <div class="hero-donut">
+        <img src="/img/donut.svg" alt="pixel donut" class="floaty">
+        <div class="sprinkle s1"></div><div class="sprinkle s2"></div>
+        <div class="sprinkle s3"></div><div class="sprinkle s4"></div>
+      </div>
+    </div>
+
+    <h2 class="section-title">Pick your poison</h2>
+    <div class="game-grid">
+      <a class="game-card" href="#/cases">
+        <div class="game-art art-cases"><img class="pix" src="/img/items/barrel.png" alt=""></div>
+        <div class="game-info"><strong>Cases</strong><span>solo or battle the bot</span></div>
+      </a>
+      <a class="game-card" href="#/mines">
+        <div class="game-art art-mines"><img class="pix" src="/img/items/tnt.png" alt=""></div>
+        <div class="game-info"><strong>Mines</strong><span>25 tiles, dodge the TNT</span></div>
+      </a>
+      <a class="game-card" href="#/towers">
+        <div class="game-art art-towers"><img class="pix" src="/img/items/ladder.png" alt=""></div>
+        <div class="game-info"><strong>Towers</strong><span>climb 8 floors, don't slip</span></div>
+      </a>
+      <a class="game-card" href="#/coinflip">
+        <div class="game-art art-coin"><img class="pix" src="/img/items/gold_nugget.png" alt=""></div>
+        <div class="game-info"><strong>Coinflip</strong><span>emerald or gold, 1.98×</span></div>
+      </a>
+      <a class="game-card" href="#/blackjack">
+        <div class="game-art art-bj"><img class="pix" src="/img/items/filled_map.png" alt=""></div>
+        <div class="game-info"><strong>Blackjack</strong><span>dealer stands on 17</span></div>
+      </a>
+      <a class="game-card" href="#/dice">
+        <div class="game-art art-dice"><img class="pix" src="/img/items/rabbit_foot.png" alt=""></div>
+        <div class="game-info"><strong>Dice</strong><span>slide it, up to 49.5×</span></div>
+      </a>
+      <a class="game-card" href="#/chicken">
+        <div class="game-art art-chicken"><img class="pix" src="/img/items/chicken.png" alt=""></div>
+        <div class="game-info"><strong>Chicken</strong><span>cross the lava, don't fry</span></div>
+      </a>
+    </div>
+
+    <div class="home-cols">
+      <div class="panel">
+        <h3 class="panel-title"><span class="live-dot"></span> Live bets</h3>
+        <table class="feed-table" id="feed-table">
+          <thead><tr><th>player</th><th>game</th><th>bet</th><th>mult</th><th>payout</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="panel">
+        <h3 class="panel-title">Top wagerers</h3>
+        <ol class="leaderboard" id="leaderboard"></ol>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======== CASES ======== -->
+  <section class="page hidden" data-page="cases">
+    <div class="cases-topbar">
+      <button class="cases-tab active" id="tab-battles">Case battles</button>
+      <button class="cases-tab" id="tab-single">Open single case</button>
+      <span class="cases-topbar-spacer"></span>
+      <button class="btn btn-green" id="battle-create-btn">Create case battle</button>
+    </div>
+
+    <!-- battle lobby -->
+    <div id="battles-view">
+      <div class="battle-list" id="battle-list"></div>
+      <p class="stage-msg" id="battles-empty">No open battles right now — make one.</p>
+      <h3 class="history-head" id="history-head">Previous battles</h3>
+      <div class="history-list" id="history-list"></div>
+    </div>
+
+    <!-- battle creation -->
+    <div id="battle-create-view" class="hidden">
+      <button class="btn btn-ghost btn-small" id="battle-back">&lt; Go back</button>
+      <h2 class="section-title" style="margin-top:14px">Create Case Battle</h2>
+      <div class="create-cols">
+        <div>
+          <p class="side-label">Cases</p>
+          <div class="lineup" id="lineup"></div>
+          <button class="add-case-tile" id="lineup-add-btn">+ Add case</button>
+        </div>
+        <div>
+          <p class="side-label">Spin speed</p>
+          <div class="side-pick" id="speed-pick">
+            <button class="side-btn active" data-speed="normal">Normal</button>
+            <button class="side-btn" data-speed="quick">Quick</button>
+            <button class="side-btn" data-speed="instant">Instant</button>
+          </div>
+          <p class="side-label">Game mode</p>
+          <div class="mode-grid" id="mode-grid">
+            <button class="mode-btn active" data-bmode="standard"><b>Standard</b><span>highest total wins</span></button>
+            <button class="mode-btn" data-bmode="crazy"><b>Crazy Mode</b><span>whoever pulls the lowest, wins</span></button>
+            <button class="mode-btn" data-bmode="terminal"><b>Terminal Mode</b><span>the highest pull on the final case wins</span></button>
+            <button class="mode-btn" data-bmode="jackpot"><b>Jackpot Mode</b><span>winner chosen by % chance based on pulls</span></button>
+            <button class="mode-btn" data-bmode="degen"><b>Degen Mode</b><span>get a random game mode!</span></button>
+          </div>
+          <p class="side-label">Players</p>
+          <div class="side-pick" id="size-pick">
+            <button class="side-btn active" data-bsize="1v1">1v1</button>
+            <button class="side-btn" data-bsize="1v1v1">1v1v1</button>
+            <button class="side-btn" data-bsize="1v1v1v1">1v1v1v1</button>
+            <button class="side-btn" data-bsize="2v2">2v2</button>
+          </div>
+          <button class="btn btn-green btn-big btn-block" id="battle-create-go" style="margin-top:16px">Create Battle — <span id="battle-total">0</span></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- battle room (watch a battle play out) -->
+    <div id="battle-room" class="lux hidden">
+      <button class="btn btn-ghost btn-small" id="room-back">&lt; Back to lobby</button>
+      <div class="room-head">
+        <h2 class="section-title" id="room-title">Battle</h2>
+        <span class="room-mode" id="room-mode"></span>
+      </div>
+      <div class="battle-board" id="room-board"></div>
+      <div class="room-actions">
+        <button class="btn btn-gold hidden" id="room-bots">Start with bots</button>
+      </div>
+      <p class="stage-msg" id="room-msg"></p>
+    </div>
+
+    <!-- single case: browse grid -->
+    <div id="single-view" class="lux hidden">
+      <div class="case-browse-bar">
+        <input type="text" id="case-search" placeholder="Search cases...">
+        <button class="btn btn-ghost btn-small" id="case-sort">Price ↑</button>
+      </div>
+      <div class="case-grid" id="case-grid"></div>
+    </div>
+
+    <!-- single case: opening detail -->
+    <div id="case-detail" class="lux hidden">
+      <div class="detail-topbar">
+        <button class="btn btn-ghost btn-small" id="detail-back">&lt; All cases</button>
+        <button class="btn btn-ghost btn-small fair-btn" data-fair>🛡 Provably Fair</button>
+      </div>
+      <div class="detail-head">
+        <img id="detail-cover" src="" alt="">
+        <div>
+          <h2 class="section-title" id="detail-name" style="margin:0"></h2>
+          <p class="hint" id="detail-sub"></p>
+        </div>
+        <div class="qty-pick" id="case-qty">
+          <button class="qty-btn active" data-qty="1">1</button>
+          <button class="qty-btn" data-qty="2">2</button>
+          <button class="qty-btn" data-qty="3">3</button>
+          <button class="qty-btn" data-qty="4">4</button>
+          <button class="qty-btn" data-qty="5">5</button>
+        </div>
+        <button class="btn btn-green btn-big" id="cases-open">Open — <span id="detail-price"></span></button>
+      </div>
+      <div class="game-stage lux-stage" id="case-stage">
+        <div class="open-arena" id="open-arena"></div>
+        <p class="stage-msg" id="cases-msg">Contents below — every drop chance is shown.</p>
+        <div class="loot-grid" id="case-loot"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======== CHICKEN ======== -->
+  <section class="page hidden" data-page="chicken">
+    <div class="game-layout">
+      <aside class="bet-panel">
+        <h2>Chicken</h2>
+        <label class="field"><span>Bet amount</span>
+          <div class="amount-row">
+            <input type="text" id="chicken-amount" value="10K" placeholder="e.g. 500M">
+            <button class="btn btn-tiny" data-half="chicken-amount">½</button>
+            <button class="btn btn-tiny" data-double="chicken-amount">2×</button>
+            <button class="btn btn-tiny" data-max="chicken-amount">Max</button>
+          </div>
+        </label>
+        <div class="side-pick">
+          <button class="side-btn active" data-cdiff="easy">Easy</button>
+          <button class="side-btn" data-cdiff="medium">Medium</button>
+          <button class="side-btn" data-cdiff="hard">Hard</button>
+        </div>
+        <div class="dice-stats">
+          <div><span>Current</span><b id="chicken-current">—</b></div>
+          <div><span>Next lane</span><b id="chicken-next">—</b></div>
+        </div>
+        <button class="btn btn-green btn-big btn-block" id="chicken-start">Send the chicken</button>
+        <div class="bj-actions hidden" id="chicken-actions">
+          <button class="btn btn-green" id="chicken-step">Step</button>
+          <button class="btn btn-gold" id="chicken-cashout">Cash out</button>
+        </div>
+      </aside>
+      <div class="game-stage">
+        <div class="chicken-road" id="chicken-road"></div>
+        <p class="stage-msg" id="chicken-msg">Cross the tracks. Every lane multiplies the bet — until one doesn't.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======== DAILY CASE ======== -->
+  <section class="page hidden" data-page="daily">
+    <div class="game-layout">
+      <aside class="bet-panel">
+        <h2>Daily Case</h2>
+        <p class="hint">One free case every 24 hours. No stake, pure profit — from a bottle of XP up to a Nether Star.</p>
+        <div class="dice-stats">
+          <div><span>Status</span><b id="daily-status">—</b></div>
+        </div>
+        <button class="btn btn-gold btn-big btn-block" id="daily-open">Open daily case</button>
+      </aside>
+      <div class="game-stage">
+        <div class="reel-window">
+          <div class="reel" id="daily-reel"></div>
+          <div class="reel-needle"></div>
+        </div>
+        <div class="loot-grid" id="daily-loot"></div>
+        <p class="stage-msg" id="daily-msg">Come back every day. The star is real, someone will hit it.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======== DICE ======== -->
+  <section class="page hidden" data-page="dice">
+    <div class="game-layout">
+      <aside class="bet-panel">
+        <h2>Dice</h2>
+        <label class="field"><span>Bet amount</span>
+          <div class="amount-row">
+            <input type="text" id="dice-amount" value="10K" placeholder="e.g. 500M">
+            <button class="btn btn-tiny" data-half="dice-amount">½</button>
+            <button class="btn btn-tiny" data-double="dice-amount">2×</button>
+            <button class="btn btn-tiny" data-max="dice-amount">Max</button>
+          </div>
+        </label>
+        <label class="field"><span>Roll <b id="dice-dir-label">under</b> <b id="dice-target-label">50.00</b></span>
+          <input type="range" id="dice-target" min="2" max="98" value="50" step="1">
+        </label>
+        <div class="dice-stats">
+          <div><span>Win chance</span><b id="dice-chance">50%</b></div>
+          <div><span>Payout</span><b id="dice-mult">1.98×</b></div>
+        </div>
+        <button class="btn btn-ghost btn-small" id="dice-flip-dir">↕ switch to over</button>
+        <button class="btn btn-green btn-big btn-block" id="dice-roll">Roll</button>
+      </aside>
+      <div class="game-stage">
+        <div class="dice-track">
+          <div class="dice-fill" id="dice-fill"></div>
+          <div class="dice-marker" id="dice-marker"><span id="dice-result">?</span></div>
+        </div>
+        <p class="stage-msg" id="dice-msg">Slide the target, then roll.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======== COINFLIP ======== -->
+  <section class="page hidden" data-page="coinflip">
+    <div class="game-layout">
+      <aside class="bet-panel">
+        <h2>Coinflip</h2>
+        <label class="field"><span>Bet amount</span>
+          <div class="amount-row">
+            <input type="text" id="cf-amount" value="10K" placeholder="e.g. 500M">
+            <button class="btn btn-tiny" data-half="cf-amount">½</button>
+            <button class="btn btn-tiny" data-double="cf-amount">2×</button>
+            <button class="btn btn-tiny" data-max="cf-amount">Max</button>
+          </div>
+        </label>
+        <div class="side-pick">
+          <button class="side-btn active" id="cf-frosted" data-side="frosted">Emerald</button>
+          <button class="side-btn" id="cf-glazed" data-side="glazed">Gold</button>
+        </div>
+        <p class="hint">Winner takes 1.98× — the missing 0.02 keeps the furnace lit.</p>
+        <button class="btn btn-green btn-big btn-block" id="cf-flip">Flip it</button>
+      </aside>
+      <div class="game-stage">
+        <div class="coin-scene">
+          <div class="coin" id="coin">
+            <div class="coin-face coin-front"><img src="/img/items/emerald.png" alt="emerald"></div>
+            <div class="coin-face coin-back"><img src="/img/items/gold_ingot.png" alt="gold"></div>
+          </div>
+        </div>
+        <p class="stage-msg" id="cf-msg">Emerald is green. Gold is... gold. Choose wisely.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======== MINES ======== -->
+  <section class="page hidden" data-page="mines">
+    <div class="game-layout">
+      <aside class="bet-panel">
+        <h2>Mines</h2>
+        <label class="field"><span>Bet amount</span>
+          <div class="amount-row">
+            <input type="text" id="mines-amount" value="10K" placeholder="e.g. 500M">
+            <button class="btn btn-tiny" data-half="mines-amount">½</button>
+            <button class="btn btn-tiny" data-double="mines-amount">2×</button>
+            <button class="btn btn-tiny" data-max="mines-amount">Max</button>
+          </div>
+        </label>
+        <label class="field"><span>TNT: <b id="mines-count-label">3</b></span>
+          <input type="range" id="mines-count" min="1" max="24" value="3">
+        </label>
+        <div class="dice-stats">
+          <div><span>Current</span><b id="mines-current">—</b></div>
+          <div><span>Next tile</span><b id="mines-next">—</b></div>
+        </div>
+        <button class="btn btn-green btn-big btn-block" id="mines-start">Start game</button>
+        <button class="btn btn-gold btn-big btn-block hidden" id="mines-cashout">Cash out</button>
+      </aside>
+      <div class="game-stage">
+        <div class="mines-grid" id="mines-grid"></div>
+        <p class="stage-msg" id="mines-msg">Dig safe blocks. Every one bumps your multiplier. Hit TNT and it's over.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======== TOWERS ======== -->
+  <section class="page hidden" data-page="towers">
+    <div class="game-layout">
+      <aside class="bet-panel">
+        <h2>Towers</h2>
+        <label class="field"><span>Bet amount</span>
+          <div class="amount-row">
+            <input type="text" id="towers-amount" value="10K" placeholder="e.g. 500M">
+            <button class="btn btn-tiny" data-half="towers-amount">½</button>
+            <button class="btn btn-tiny" data-double="towers-amount">2×</button>
+            <button class="btn btn-tiny" data-max="towers-amount">Max</button>
+          </div>
+        </label>
+        <div class="side-pick">
+          <button class="side-btn active" id="towers-easy" data-diff="easy">Easy · 1 TNT</button>
+          <button class="side-btn" id="towers-hard" data-diff="hard">Hard · 2 TNT</button>
+        </div>
+        <div class="dice-stats">
+          <div><span>Current</span><b id="towers-current">—</b></div>
+          <div><span>Next floor</span><b id="towers-next">—</b></div>
+        </div>
+        <button class="btn btn-green btn-big btn-block" id="towers-start">Start climb</button>
+        <button class="btn btn-gold btn-big btn-block hidden" id="towers-cashout">Cash out</button>
+      </aside>
+      <div class="game-stage">
+        <div class="tower" id="tower"></div>
+        <p class="stage-msg" id="towers-msg">Eight floors to the top. Pick a safe block on each one.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======== BLACKJACK ======== -->
+  <section class="page hidden" data-page="blackjack">
+    <div class="game-layout">
+      <aside class="bet-panel">
+        <h2>Blackjack</h2>
+        <label class="field"><span>Bet amount</span>
+          <div class="amount-row">
+            <input type="text" id="bj-amount" value="10K" placeholder="e.g. 500M">
+            <button class="btn btn-tiny" data-half="bj-amount">½</button>
+            <button class="btn btn-tiny" data-double="bj-amount">2×</button>
+            <button class="btn btn-tiny" data-max="bj-amount">Max</button>
+          </div>
+        </label>
+        <p class="hint">Blackjack pays 3:2. Dealer stands on all 17s. Four decks, shuffled fresh per hand.</p>
+        <button class="btn btn-green btn-big btn-block" id="bj-deal">Deal</button>
+        <div class="bj-actions hidden" id="bj-actions">
+          <button class="btn btn-ghost" id="bj-hit">Hit</button>
+          <button class="btn btn-ghost" id="bj-stand">Stand</button>
+          <button class="btn btn-gold" id="bj-double">Double</button>
+        </div>
+      </aside>
+      <div class="game-stage">
+        <div class="bj-table">
+          <div class="bj-hand">
+            <p class="bj-label">Dealer <b id="bj-dealer-value"></b></p>
+            <div class="cards" id="bj-dealer-cards"></div>
+          </div>
+          <div class="bj-hand">
+            <p class="bj-label">You <b id="bj-player-value"></b></p>
+            <div class="cards" id="bj-player-cards"></div>
+          </div>
+        </div>
+        <p class="stage-msg" id="bj-msg">Beat the dealer without going over 21.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======== DEPOSIT ======== -->
+  <section class="page hidden" data-page="deposit">
+    <div class="panel fair-panel">
+      <h2>Deposit Donuts</h2>
+      <p>Pay the bot in-game and your balance updates instantly on the site.</p>
+
+      <div id="deposit-unlinked">
+        <div class="fair-row" style="margin-top:16px">
+          <span>Step 1</span><span>Click <b>⛏ Link MC Account</b> in the top bar and pay the bot the shown amount</span>
+        </div>
+        <div class="fair-row">
+          <span>Step 2</span><span>Your Minecraft username becomes your site account automatically</span>
+        </div>
+        <div class="fair-row">
+          <span>Step 3</span><span>Pay the bot any amount — it goes straight to your site balance</span>
+        </div>
+        <button class="btn btn-green" style="margin-top:16px" id="deposit-link-btn">⛏ Link MC Account</button>
+      </div>
+
+      <div id="deposit-linked" class="hidden">
+        <div class="fair-row" style="margin-top:16px">
+          <span>Your MC username</span><code id="deposit-mc-name"></code>
+        </div>
+        <div class="fair-row">
+          <span>Bot to pay</span><code id="deposit-bot-name"></code>
+        </div>
+        <p style="margin-top:16px" class="hint">In-game type: <code id="deposit-cmd">/pay AALV1N &lt;amount&gt;</code></p>
+        <p class="hint">Your balance updates within a few seconds of the payment being received.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======== FAIRNESS ======== -->
+  <section class="page hidden" data-page="fair">
+    <div class="panel fair-panel">
+      <h2>Provably fair</h2>
+      <p>Before you bet, we commit to a secret <b>server seed</b> by showing you its SHA-256 hash.
+        Each result is <code>HMAC-SHA256(serverSeed, clientSeed:nonce:cursor)</code>.
+        When you rotate seeds, the old server seed is revealed so you can re-compute every
+        past bet yourself and confirm the hash matched. We can't change results after the fact —
+        the hash would give it away.</p>
+      <div id="fair-user" class="hidden">
+        <div class="fair-row"><span>Server seed hash</span><code id="fair-hash"></code></div>
+        <div class="fair-row"><span>Client seed</span><code id="fair-client"></code></div>
+        <div class="fair-row"><span>Next nonce</span><code id="fair-nonce"></code></div>
+        <label class="field"><span>New client seed (optional)</span>
+          <input type="text" id="fair-newclient" maxlength="64" placeholder="leave empty for random">
+        </label>
+        <button class="btn btn-green" id="fair-rotate">Rotate &amp; reveal seed</button>
+        <div id="fair-revealed" class="hidden">
+          <div class="fair-row"><span>Revealed server seed</span><code id="fair-revealed-seed"></code></div>
+          <p class="hint">Check it: sha256 of that seed should equal the old hash above.</p>
+        </div>
+      </div>
+      <p id="fair-signin" class="hint">Place a bet or sign in first, then your seeds show up here.</p>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <p>DonutWager · community-run for DonutSMP</p>
+</footer>
+</div><!-- /main-col -->
+
+<!-- ======== CHAT ======== -->
+<aside class="chat" id="chat">
+  <div class="chat-head">
+    <span>Chat</span>
+    <button class="btn btn-ghost btn-tiny" id="chat-close">✕</button>
+  </div>
+  <div class="chat-body" id="chat-body"></div>
+  <div class="chat-foot">
+    <input type="text" id="chat-input" maxlength="200" placeholder="say something...">
+    <button class="btn btn-green btn-small" id="chat-send">➤</button>
+  </div>
+</aside>
+
+<!-- ======== CASE PICKER MODAL ======== -->
+<div class="modal-backdrop hidden" id="picker-backdrop">
+  <div class="modal picker-modal">
+    <div class="picker-head">
+      <h3>Add cases to a battle</h3>
+      <button class="btn btn-ghost btn-tiny" id="picker-close">✕</button>
+    </div>
+    <input type="text" id="picker-search" placeholder="Search for a case">
+    <div class="case-grid picker-grid" id="picker-grid"></div>
+    <div class="picker-foot">
+      <span id="picker-total">0 selected</span>
+      <button class="btn btn-ghost" id="picker-clear">Clear selection</button>
+      <button class="btn btn-green" id="picker-done">Add to battle</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======== MODALS ======== -->
+<div class="modal-backdrop hidden" id="modal-backdrop">
+  <div class="modal" id="modal-login">
+    <h3>Welcome back</h3>
+    <label class="field"><span>Username</span><input type="text" id="login-user" maxlength="16" autocomplete="username"></label>
+    <label class="field"><span>Password</span><input type="password" id="login-pass" autocomplete="current-password"></label>
+    <p class="form-error" id="login-error"></p>
+    <button class="btn btn-green btn-block" id="login-submit">Sign in</button>
+    <p class="hint">No account? <a href="#" data-modal="register">Register</a> — takes 10 seconds.</p>
+  </div>
+  <div class="modal" id="modal-register">
+    <h3>Join the server</h3>
+    <label class="field"><span>Username (3-16, letters/numbers/_)</span><input type="text" id="reg-user" maxlength="16" autocomplete="username"></label>
+    <label class="field"><span>Password (6+ chars)</span><input type="password" id="reg-pass" autocomplete="new-password"></label>
+    <p class="form-error" id="reg-error"></p>
+    <button class="btn btn-green btn-block" id="reg-submit">Create account</button>
+    <p class="hint">Already registered? <a href="#" data-modal="login">Sign in</a></p>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- WITHDRAW MODAL -->
+<div class="modal-backdrop hidden" id="withdraw-modal-backdrop">
+  <div class="modal" id="withdraw-modal">
+    <h3>⬇ Withdraw Donuts</h3>
+    <p class="hint">The bot will pay your Minecraft account in-game.</p>
+    <label class="field"><span>Amount</span>
+      <div class="amount-row">
+        <input type="text" id="withdraw-amount" placeholder="e.g. 500M">
+        <button class="btn btn-tiny" id="withdraw-max">Max</button>
+      </div>
+    </label>
+    <p class="form-error" id="withdraw-error"></p>
+    <button class="btn btn-green btn-block" id="withdraw-submit">Withdraw</button>
+    <button class="btn btn-ghost btn-small" id="withdraw-close" style="margin-top:10px">Close</button>
+  </div>
+</div>
+
+<!-- DEPOSIT MODAL -->
+<div class="modal-backdrop hidden" id="deposit-modal-backdrop">
+  <div class="modal">
+    <h3>⬆ Deposit Donuts</h3>
+    <p class="hint">Enter the amount you want to deposit, then run the command in Minecraft.</p>
+    <label class="field"><span>Amount</span>
+      <input type="text" id="deposit-modal-amount" placeholder="e.g. 500M">
+    </label>
+    <div id="deposit-modal-cmd" class="hidden">
+      <p class="hint" style="margin-top:10px">Type this in Minecraft:</p>
+      <code id="deposit-modal-code" style="display:block;font-size:1.1em;padding:12px;background:var(--bg2);border-radius:6px;margin:6px 0;word-break:break-all"></code>
+    </div>
+    <button class="btn btn-green btn-block" id="deposit-modal-generate">Generate command</button>
+    <button class="btn btn-ghost btn-small" id="deposit-modal-close" style="margin-top:10px">Close</button>
+  </div>
+</div>
+
+<!-- MC LINK MODAL -->
+<div class="modal-backdrop hidden" id="mc-modal-backdrop">
+  <div class="modal" id="mc-modal">
+    <h3>⛏ Link Minecraft Account</h3>
+
+    <!-- Step 1: generate payment -->
+    <div id="mc-link-start">
+      <p class="hint">Pay the bot a small random amount of Donuts in-game. Your Minecraft username becomes your site account — no password needed. The fee is instantly refunded.</p>
+      <button class="btn btn-green btn-block" id="mc-link-generate">Generate link payment</button>
+    </div>
+
+    <!-- Step 2: pending payment -->
+    <div id="mc-link-pending" class="hidden">
+      <p class="hint">In Minecraft, type this exact command:</p>
+      <code id="mc-link-cmd" style="display:block;font-size:1.1em;padding:12px;background:var(--bg2);border-radius:6px;margin:10px 0;word-break:break-all"></code>
+      <p class="hint">The bot will refund your payment and log you in. Expires in <b>10 minutes</b>.</p>
+      <button class="btn btn-ghost btn-block" id="mc-link-check">Check if linked</button>
+    </div>
+
+    <!-- Step 3: linked -->
+    <div id="mc-link-linked" class="hidden">
+      <p style="color:var(--green)">✅ Logged in as <b id="mc-linked-name"></b></p>
+      <p class="hint">Pay the bot again any time to deposit Donuts to your balance.</p>
+      <button class="btn btn-ghost btn-small" id="mc-unlink-btn">Unlink</button>
+    </div>
+
+    <button class="btn btn-ghost btn-small" id="mc-modal-close" style="margin-top:12px">Close</button>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+</body>
+</html>

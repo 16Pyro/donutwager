@@ -1,0 +1,24 @@
+{
+  "name": "donutwager",
+  "version": "1.0.0",
+  "description": "DonutWager - the DonutSMP community casino. Provably fair, server-sided games.",
+  "main": "server/index.js",
+  "type": "commonjs",
+  "private": true,
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^9.4.3",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "mineflayer": "^4.25.0",
+    "prismarine-auth": "^2.4.0"
+  }
+}
