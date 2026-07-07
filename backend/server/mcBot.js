@@ -232,6 +232,18 @@ function createBot(name) {
 
   bot.on('error', (err) => {
     console.error(`[mcBot] ${name} ERROR:`, err.message);
+    if (err.message.includes('Failed to obtain profile data') || err.message.includes('own minecraft')) {
+      const authFolder = require('path').join(process.env.DATA_DIR || require('path').join(__dirname, '..', 'data'), '.bot-auth', name);
+      try {
+        require('fs').rmSync(authFolder, { recursive: true, force: true });
+        console.log(`[mcBot] Cleared invalid auth cache at ${authFolder}`);
+      } catch (e) {
+        console.error(`[mcBot] Failed to clear auth cache:`, e.message);
+      }
+      _activeBot = null;
+      bot.end();
+      setTimeout(() => createBot(name), 10000);
+    }
   });
 
   bot.on('end', (reason) => {
