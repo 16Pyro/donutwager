@@ -155,6 +155,9 @@ function route() {
   $$('.sidenav a[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === target));
   if (target === 'fair') renderFair();
   if (target === 'deposit') renderDeposit();
+  if (target === 'rewards') renderRewards();
+  if (target === 'profile') renderProfile();
+  if (target === 'leaderboard') renderLeaderboard();
   if (target === 'cases') refreshBattles();
   syncActiveGame(target);
   document.body.classList.remove('nav-open');
@@ -224,7 +227,7 @@ function applyUser(user) {
   $('#user-menu').classList.toggle('hidden', !user);
   $('#mc-link-btn').classList.toggle('hidden', !!(user && user.mcUsername));
   if (user) {
-    $('#username-label').textContent = user.username;
+    $('#username-text').textContent = user.anonymous ? 'Anonymous' : user.username;
     $('#balance').textContent = fmt(user.balance);
   }
   // re-render deposit page if it's currently visible
@@ -346,7 +349,7 @@ let caseById = {};          // id -> case
 let caseSpinning = false;
 let detailCase = null;      // case currently open in the detail view
 let caseSort = 'asc', caseQuery = '';
-const itemIcon = (i) => `<img src="/img/items/${i.icon}.png" alt="">`;
+const itemIcon = (i) => `<img src="/img/items/${i.icon}.png" alt="${i.name || i.icon}">`;
 
 // rarity ladder: label + reveal intensity used across the premium case flow.
 // tier drives sound, particle count, flash/shake and reveal timing.
@@ -418,7 +421,7 @@ function caseObjHTML(c, cls = '') {
   const th = caseTheme(c);
   return `<div class="case-obj ${cls}" style="--ct:${th.c};--ctg:${th.g}">
     <div class="case-glow"></div>
-    <img class="case-item" src="/img/items/${c.cover}.png" alt="">
+    <img class="case-item" src="/img/items/${c.cover}.png" alt="${c.name} case">
     ${CHEST_SVG}</div>`;
 }
 
@@ -531,6 +534,7 @@ function openDetail(c) {
   $('#single-view').classList.add('hidden');
   $('#case-detail').classList.remove('hidden');
   $('#detail-cover').src = `/img/items/${c.cover}.png`;
+  $('#detail-cover').alt = `${c.name} case cover`;
   $('#detail-name').textContent = c.name;
   $('#detail-sub').textContent = `${c.risk} risk · ${c.items.length} possible drops`;
   $('#detail-price').textContent = fmt(c.price);
@@ -700,7 +704,8 @@ function renderPicker(q) {
       grid.appendChild(el);
     });
   const total = Object.values(pickerSel).reduce((s, n) => s + n, 0);
-  $('#picker-total').textContent = `${total} selected`;
+  const cost = Object.entries(pickerSel).reduce((s, [id, n]) => s + (caseById[id]?.price || 0) * n, 0);
+  $('#picker-total').innerHTML = `${total} selected · <span class="picker-cost coin" id="picker-cost">${fmt(cost)}</span>`;
 }
 $('#picker-search').addEventListener('input', (e) => renderPicker(e.target.value.toLowerCase()));
 $('#picker-close').onclick = () => $('#picker-backdrop').classList.add('hidden');
@@ -761,7 +766,7 @@ function historyRow(b) {
     const cell = document.createElement('div');
     cell.className = 'hr-player ' + (won ? 'won' : 'lost');
     const skin = skinFor((p.name || '?') + ':' + i);
-    cell.innerHTML = `<div class="hr-pfp"><img src="https://minotar.net/helm/${skin}/40.png" alt="" loading="lazy">${won ? '<span class="hr-crown">🏆</span>' : ''}</div>
+    cell.innerHTML = `<div class="hr-pfp"><img src="https://minotar.net/helm/${skin}/40.png" alt="${p.name || 'player'} skin" loading="lazy">${won ? '<span class="hr-crown">🏆</span>' : ''}</div>
       <span class="hr-name">${p.name}</span>
       <span class="hr-amt">${won ? '+' + fmt(r.share) : fmt(r.totals[i])}</span>`;
     players.appendChild(cell);
@@ -810,7 +815,7 @@ function battleRow(b) {
   b.lineup.forEach((l) => {
     const c = document.createElement('span');
     c.className = 'b-case clickable';
-    c.innerHTML = `<img src="/img/items/${l.cover}.png" alt="">` + (l.count > 1 ? `<i>x${l.count}</i>` : '');
+    c.innerHTML = `<img src="/img/items/${l.cover}.png" alt="${l.name} case">` + (l.count > 1 ? `<i>x${l.count}</i>` : '');
     c.title = `${l.name} — click to see drops`;
     c.onclick = (e) => { e.stopPropagation(); showCasePeek(l.caseId); };
     cases.appendChild(c);
@@ -926,7 +931,7 @@ function skinFor(key) {
 function playerAvatarHTML(p, seat = 0) {
   if (!p) return `<div class="bt-avatar empty">·</div>`;
   const skin = skinFor((p.name || '?') + ':' + seat);
-  return `<div class="bt-avatar${p.bot ? ' bot' : ''}"><img src="https://minotar.net/helm/${skin}/48.png" alt="" loading="lazy"></div>`;
+  return `<div class="bt-avatar${p.bot ? ' bot' : ''}"><img src="https://minotar.net/helm/${skin}/48.png" alt="${p.name || 'player'} skin" loading="lazy"></div>`;
 }
 function weightedPick(items) {
   let r = Math.random() * items.reduce((s, i) => s + i.chance, 0);
@@ -963,7 +968,7 @@ function buildBattleArena(b, playing) {
     const el = document.createElement('div');
     el.className = 'bt-scase clickable';
     el.title = c ? `${c.name} — click to see drops` : '';
-    el.innerHTML = `<img src="/img/items/${c ? c.cover : ''}.png" alt="">`;
+    el.innerHTML = `<img src="/img/items/${c ? c.cover : ''}.png" alt="${c ? c.name : 'case'}">`;
     el.onclick = () => showCasePeek(rd.caseId);
     strip.appendChild(el);
   });
@@ -1233,8 +1238,8 @@ $('#cf-flip').onclick = async () => {
 // ================= MINES =================
 const minesEl = { grid: $('#mines-grid'), msg: $('#mines-msg'), start: $('#mines-start'), cash: $('#mines-cashout') };
 let minesActive = false;
-const DIAMOND_IMG = '<img src="/img/items/diamond.png" alt="">';
-const TNT_IMG = '<img src="/img/items/tnt.png" alt="">';
+const DIAMOND_IMG = '<img src="/img/items/diamond.png" alt="Diamond">';
+const TNT_IMG = '<img src="/img/items/tnt.png" alt="TNT">';
 
 function buildMinesGrid(revealed = []) {
   minesEl.grid.innerHTML = '';
@@ -1319,8 +1324,8 @@ minesEl.cash.onclick = async () => {
 const towEl = { tower: $('#tower'), msg: $('#towers-msg'), start: $('#towers-start'), cash: $('#towers-cashout') };
 let towActive = false, towDiff = 'easy', towRow = 0;
 const TOW_MULT = { easy: 1.485, hard: 2.97 };
-const LADDER_IMG = '<img src="/img/items/ladder.png" alt="">';
-const FIREBALL_IMG = '<img src="/img/items/fire_charge.png" alt="">';
+const LADDER_IMG = '<img src="/img/items/ladder.png" alt="Ladder">';
+const FIREBALL_IMG = '<img src="/img/items/fire_charge.png" alt="Fireball">';
 
 $$('.side-btn[data-diff]').forEach((b) => b.onclick = () => {
   if (towActive) return;
@@ -1632,6 +1637,157 @@ async function renderDeposit() {
   }
 }
 $('#deposit-link-btn').onclick = openMcModal;
+
+// ================= REWARDS (rakeback + level) =================
+async function renderRewards() {
+  if (!me) return;
+  let data;
+  try { data = await api('rewards'); } catch (e) { return toast(e.message); }
+
+  const grid = $('#rb-grid');
+  grid.innerHTML = '';
+  {
+    const kind = 'instant';
+    const info = data.rakeback[kind];
+    const card = document.createElement('div');
+    card.className = 'rb-card';
+    card.innerHTML = `
+      <strong>Instant</strong>
+      <span class="rb-amt">${fmt(info.amount)}</span>
+      <button class="btn btn-green btn-small" ${info.amount > 0 ? '' : 'disabled'}>Claim</button>
+    `;
+    card.querySelector('button').onclick = async () => {
+      try {
+        const r = await api('rewards/rakeback', { kind });
+        setBalance(r.balance);
+        toast(`Claimed ${fmt(r.amount)} rakeback!`, true);
+        renderRewards();
+      } catch (e) { toast(e.message); }
+    };
+    grid.appendChild(card);
+  }
+
+  const lv = data.level;
+  $('#rw-level').textContent = lv.level;
+  $('#rw-bar').style.width = lv.progressPct + '%';
+  $('#rw-progress').textContent = `${fmt(lv.wageredCoins)} / ${fmt(lv.nextCeil)} wagered toward level ${lv.level + 1}`;
+
+  const ms = $('#rw-milestones');
+  ms.innerHTML = '';
+  const claimable = lv.milestones.filter(m => m.unlocked && !m.claimed);
+  lv.milestones.forEach(m => {
+    const el = document.createElement('div');
+    el.className = 'rb-milestone' + (m.claimed ? ' claimed' : m.unlocked ? ' unlocked' : '');
+    el.innerHTML = `<span>Lvl ${m.level}</span><span>${fmt(m.reward)}</span>`;
+    ms.appendChild(el);
+  });
+  const claimBtn = $('#rw-claim-btn');
+  if (claimBtn) claimBtn.remove();
+  if (claimable.length) {
+    const btn = document.createElement('button');
+    btn.id = 'rw-claim-btn';
+    btn.className = 'btn btn-green';
+    btn.style.marginTop = '12px';
+    btn.textContent = `Claim ${claimable.length} level reward${claimable.length > 1 ? 's' : ''}`;
+    btn.onclick = async () => {
+      try {
+        const r = await api('rewards/level');
+        setBalance(r.balance);
+        toast(`Claimed ${fmt(r.amount)} from levels ${r.levels.join(', ')}!`, true);
+        renderRewards();
+      } catch (e) { toast(e.message); }
+    };
+    ms.after(btn);
+  }
+}
+
+// ================= PROFILE =================
+async function renderProfile() {
+  if (!me) return;
+  let d;
+  try { d = await api('profile'); } catch (e) { return toast(e.message); }
+
+  $('#pf-avatar').src = d.mcUsername
+    ? `https://crafatar.com/avatars/${encodeURIComponent(d.mcUsername)}?overlay`
+    : '/img/donut.svg';
+  $('#pf-avatar').alt = `${d.mcUsername || d.username} avatar`;
+  $('#pf-name').textContent = d.mcUsername || d.username;
+  $('#pf-level').textContent = d.level;
+  $('#pf-xp-cur').textContent = fmt(d.wageredCoins);
+  $('#pf-xp-next').textContent = fmt(d.nextCeil);
+  $('#pf-anon-check').checked = !!me.anonymous;
+  const pct = d.nextCeil > d.curFloor ? ((d.wageredCoins - d.curFloor) / (d.nextCeil - d.curFloor)) * 100 : 100;
+  $('#pf-xp-bar').style.width = Math.max(0, Math.min(100, pct)) + '%';
+
+  $('#pf-deposited').textContent = fmt(d.totalDeposited);
+  $('#pf-withdrawn').textContent = fmt(d.totalWithdrawn);
+  $('#pf-wagered').textContent = fmt(d.totalWagered);
+  const profitEl = $('#pf-profit');
+  profitEl.textContent = (d.profit >= 0 ? '+' : '') + fmt(d.profit);
+  profitEl.classList.toggle('pf-neg', d.profit < 0);
+  profitEl.classList.toggle('pf-pos', d.profit >= 0);
+
+  const body = $('#pf-tx-body');
+  body.innerHTML = '';
+  d.transactions.forEach(t => {
+    const tr = document.createElement('tr');
+    const when = new Date(t.created_at).toLocaleString();
+    const sign = t.amount >= 0 ? '+' : '';
+    tr.innerHTML = `<td>${when}</td><td>${t.method}</td><td>${t.type}</td><td class="${t.amount >= 0 ? 'pf-pos' : 'pf-neg'}">${sign}${fmt(t.amount)}</td>`;
+    body.appendChild(tr);
+  });
+}
+$('#pf-anon-check').onchange = async (e) => {
+  try {
+    const r = await api('anonymous', { enabled: e.target.checked });
+    me.anonymous = r.anonymous;
+    $('#username-text').textContent = me.anonymous ? 'Anonymous' : me.username;
+    toast(r.anonymous ? 'Anonymous mode on — your name is hidden in chat and feeds.' : 'Anonymous mode off.');
+  } catch (err) { e.target.checked = !e.target.checked; toast(err.message); }
+};
+
+// ================= LEADERBOARD =================
+// fixed prizes for the top 3 wagerers - cosmetic label only, no auto-payout
+const LB_PRIZE = { 1: 500_000_000, 2: 200_000_000, 3: 100_000_000 };
+function lbAvatar(name) {
+  return name
+    ? `<img src="https://crafatar.com/avatars/${encodeURIComponent(name)}?overlay" alt="${name} avatar">`
+    : `<img src="/img/donut.svg" alt="Anonymous avatar">`;
+}
+function lbPodiumCard(u, rank) {
+  const place = rank === 1 ? '1st' : rank === 2 ? '2nd' : '3rd';
+  return `<div class="lb-card lb-p${rank}">
+    <span class="lb-place">${place} place</span>
+    <div class="lb-pfp">${lbAvatar(u.avatarName)}</div>
+    <b class="lb-name">${u.username}</b>
+    <div class="lb-wagered"><span>Total wagered</span><b>${fmt(u.wagered)}</b></div>
+    <div class="lb-prize">Prize: ${fmt(LB_PRIZE[rank])}</div>
+  </div>`;
+}
+function lbRow(u, rank) {
+  return `<li class="lb-row">
+    <span class="lb-rank">${rank}</span>
+    <div class="lb-row-pfp">${lbAvatar(u.avatarName)}</div>
+    <span class="lb-row-name">${u.username}</span>
+    <span class="lb-row-wagered">${fmt(u.wagered)}</span>
+  </li>`;
+}
+async function renderLeaderboard() {
+  const podium = $('#lb-podium'), list = $('#lb-list');
+  if (!podium || !list) return;
+  try {
+    const { top } = await api('leaderboard/full');
+    if (!top.length) {
+      podium.innerHTML = '';
+      list.innerHTML = '<li class="lb-empty">Nobody has wagered yet — be the first degenerate.</li>';
+      return;
+    }
+    const [p1, p2, p3] = [top[0], top[1], top[2]];
+    podium.innerHTML = [p2 && lbPodiumCard(p2, 2), p1 && lbPodiumCard(p1, 1), p3 && lbPodiumCard(p3, 3)]
+      .filter(Boolean).join('');
+    list.innerHTML = top.slice(3).map((u, i) => lbRow(u, i + 4)).join('');
+  } catch {}
+}
 
 async function renderFair() {
   const has = !!me;

@@ -21,7 +21,15 @@ export default function RootLayout({
           <div className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-donutPink to-donutBrown">
             DONUT<span className="text-white">WAGER</span>
           </div>
-          <div className="flex gap-4">
+          <div className="flex gap-4 items-center">
+            <a 
+              href="https://discord.gg/rgZEmjjCc" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="px-4 py-2 rounded-lg font-medium hover:bg-[#5865F2]/20 text-[#5865F2] hover:text-[#5865F2] transition"
+            >
+              Discord
+            </a>
             <button className="px-4 py-2 rounded-lg font-medium hover:bg-white/10 transition">Login</button>
             <button className="px-4 py-2 bg-donutPink hover:bg-pink-500 text-white rounded-lg font-bold shadow-[0_0_15px_rgba(255,105,180,0.5)] transition">Deposit</button>
           </div>

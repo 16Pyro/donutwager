@@ -20,33 +20,50 @@
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/style.css">
 <link rel="icon" href="/img/donut.svg" type="image/svg+xml">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "DonutWager",
+  "alternateName": "Donut Wager",
+  "url": "https://www.donutwager.org",
+  "description": "DonutWager is a provably fair casino built for the DonutSMP Minecraft community. Pay any DonutWager bot in-game on donutsmp.net and your Minecraft username becomes your account automatically — no registration or password required.",
+  "publisher": {
+    "@type": "Organization",
+    "name": "DonutWager"
+  }
+}
+</script>
 </head>
 <body>
 
 <!-- ======== SIDEBAR ======== -->
 <aside class="sidebar">
   <a class="brand" href="#/" aria-label="DonutWager home">
-    <img src="/img/donut.svg" alt="" class="brand-donut">
+    <img src="/img/donut.svg" alt="DonutWager logo" class="brand-donut">
     <span class="brand-name">DONUT<em>WAGER</em></span>
   </a>
 
   <p class="side-label">Games</p>
   <nav class="sidenav">
-    <a href="#/" data-nav="home"><img class="nav-ico" src="/img/items/grass_block.png" alt="">Home</a>
-    <a href="#/cases" data-nav="cases"><img class="nav-ico" src="/img/items/barrel.png" alt="">Cases</a>
-    <a href="#/mines" data-nav="mines"><img class="nav-ico" src="/img/items/tnt.png" alt="">Mines</a>
-    <a href="#/towers" data-nav="towers"><img class="nav-ico" src="/img/items/ladder.png" alt="">Towers</a>
-    <a href="#/coinflip" data-nav="coinflip"><img class="nav-ico" src="/img/items/gold_nugget.png" alt="">Coinflip</a>
-    <a href="#/blackjack" data-nav="blackjack"><img class="nav-ico" src="/img/items/filled_map.png" alt="">Blackjack</a>
-    <a href="#/dice" data-nav="dice"><img class="nav-ico" src="/img/items/rabbit_foot.png" alt="">Dice</a>
-    <a href="#/chicken" data-nav="chicken"><img class="nav-ico" src="/img/items/chicken.png" alt="">Chicken</a>
+    <a href="#/" data-nav="home"><img class="nav-ico" src="/img/items/grass_block.png" alt="Home">Home</a>
+    <a href="#/cases" data-nav="cases"><img class="nav-ico" src="/img/items/barrel.png" alt="Cases">Cases</a>
+    <a href="#/mines" data-nav="mines"><img class="nav-ico" src="/img/items/tnt.png" alt="Mines">Mines</a>
+    <a href="#/towers" data-nav="towers"><img class="nav-ico" src="/img/items/ladder.png" alt="Towers">Towers</a>
+    <a href="#/coinflip" data-nav="coinflip"><img class="nav-ico" src="/img/items/gold_nugget.png" alt="Coinflip">Coinflip</a>
+    <a href="#/blackjack" data-nav="blackjack"><img class="nav-ico" src="/img/items/filled_map.png" alt="Blackjack">Blackjack</a>
+    <a href="#/dice" data-nav="dice"><img class="nav-ico" src="/img/items/rabbit_foot.png" alt="Dice">Dice</a>
+    <a href="#/chicken" data-nav="chicken"><img class="nav-ico" src="/img/items/chicken.png" alt="Chicken">Chicken</a>
   </nav>
 
   <p class="side-label">Other</p>
   <nav class="sidenav">
-    <a href="#/daily" data-nav="daily"><img class="nav-ico" src="/img/items/golden_apple.png" alt="">Daily Case</a>
-    <a href="#/deposit" data-nav="deposit"><img class="nav-ico" src="/img/items/emerald.png" alt="">Deposit</a>
-    <a href="#/fair" data-nav="fair"><img class="nav-ico" src="/img/items/writable_book.png" alt="">Fairness</a>
+    <a href="#/daily" data-nav="daily"><img class="nav-ico" src="/img/items/golden_apple.png" alt="Daily Case">Daily Case</a>
+    <a href="#/deposit" data-nav="deposit"><img class="nav-ico" src="/img/items/emerald.png" alt="Deposit">Deposit</a>
+    <a href="#/rewards" data-nav="rewards"><img class="nav-ico" src="/img/items/nether_star.png" alt="Rewards">Rewards</a>
+    <a href="#/profile" data-nav="profile"><img class="nav-ico" src="/img/items/name_tag.png" alt="Profile">Profile</a>
+    <a href="#/leaderboard" data-nav="leaderboard"><img class="nav-ico" src="/img/items/diamond.png" alt="Leaderboard">Leaderboard</a>
+    <a href="#/fair" data-nav="fair"><img class="nav-ico" src="/img/items/writable_book.png" alt="Fairness">Fairness</a>
   </nav>
 
   <div class="side-foot">
@@ -67,7 +84,7 @@
     <button class="btn btn-ghost btn-small" id="chat-toggle" title="Toggle chat">💬</button>
     <button class="btn btn-green" id="mc-link-btn">⛏ Link MC Account</button>
     <div id="user-menu" class="hidden">
-      <span class="user-name" id="username-label"></span>
+      <a class="btn btn-ghost btn-small" id="username-label" href="#/profile">👤 <span id="username-text"></span></a>
       <button class="btn btn-ghost btn-small" id="deposit-btn">⬆ Deposit</button>
       <button class="btn btn-ghost btn-small" id="withdraw-btn">⬇ Withdraw</button>
       <button class="btn btn-ghost btn-small" id="logout-btn">Log out</button>
@@ -83,7 +100,7 @@
         <p class="hero-kicker">the donutsmp casino</p>
         <h1>Bet your blocks.</h1>
         <p class="hero-sub">Seven games, zero trust required — every roll is provably fair
-          and settled on our servers. No signup needed: jump in with 100B coins and start mining.</p>
+          and settled on our servers. No signup needed: pay the bot in-game and start mining.</p>
         <div class="hero-actions">
           <a class="btn btn-green btn-big" href="#/cases">Open a case</a>
           <a class="btn btn-ghost btn-big" href="#/fair">How fairness works</a>
@@ -99,31 +116,31 @@
     <h2 class="section-title">Pick your poison</h2>
     <div class="game-grid">
       <a class="game-card" href="#/cases">
-        <div class="game-art art-cases"><img class="pix" src="/img/items/barrel.png" alt=""></div>
+        <div class="game-art art-cases"><img class="pix" src="/img/items/barrel.png" alt="Cases game icon"></div>
         <div class="game-info"><strong>Cases</strong><span>solo or battle the bot</span></div>
       </a>
       <a class="game-card" href="#/mines">
-        <div class="game-art art-mines"><img class="pix" src="/img/items/tnt.png" alt=""></div>
+        <div class="game-art art-mines"><img class="pix" src="/img/items/tnt.png" alt="Mines game icon"></div>
         <div class="game-info"><strong>Mines</strong><span>25 tiles, dodge the TNT</span></div>
       </a>
       <a class="game-card" href="#/towers">
-        <div class="game-art art-towers"><img class="pix" src="/img/items/ladder.png" alt=""></div>
+        <div class="game-art art-towers"><img class="pix" src="/img/items/ladder.png" alt="Towers game icon"></div>
         <div class="game-info"><strong>Towers</strong><span>climb 8 floors, don't slip</span></div>
       </a>
       <a class="game-card" href="#/coinflip">
-        <div class="game-art art-coin"><img class="pix" src="/img/items/gold_nugget.png" alt=""></div>
+        <div class="game-art art-coin"><img class="pix" src="/img/items/gold_nugget.png" alt="Coinflip game icon"></div>
         <div class="game-info"><strong>Coinflip</strong><span>emerald or gold, 1.98×</span></div>
       </a>
       <a class="game-card" href="#/blackjack">
-        <div class="game-art art-bj"><img class="pix" src="/img/items/filled_map.png" alt=""></div>
+        <div class="game-art art-bj"><img class="pix" src="/img/items/filled_map.png" alt="Blackjack game icon"></div>
         <div class="game-info"><strong>Blackjack</strong><span>dealer stands on 17</span></div>
       </a>
       <a class="game-card" href="#/dice">
-        <div class="game-art art-dice"><img class="pix" src="/img/items/rabbit_foot.png" alt=""></div>
+        <div class="game-art art-dice"><img class="pix" src="/img/items/rabbit_foot.png" alt="Dice game icon"></div>
         <div class="game-info"><strong>Dice</strong><span>slide it, up to 49.5×</span></div>
       </a>
       <a class="game-card" href="#/chicken">
-        <div class="game-art art-chicken"><img class="pix" src="/img/items/chicken.png" alt=""></div>
+        <div class="game-art art-chicken"><img class="pix" src="/img/items/chicken.png" alt="Chicken game icon"></div>
         <div class="game-info"><strong>Chicken</strong><span>cross the lava, don't fry</span></div>
       </a>
     </div>
@@ -141,6 +158,19 @@
         <ol class="leaderboard" id="leaderboard"></ol>
       </div>
     </div>
+
+    <section class="about-blurb">
+      <h2 class="section-title">What is DonutWager?</h2>
+      <p>DonutWager is a provably fair casino built for the DonutSMP Minecraft community. There's no
+        account to register and no password to remember — pay any DonutWager bot in-game on
+        donutsmp.net and your Minecraft username becomes your DonutWager identity automatically.
+        Every game result is generated from a server seed and client seed you can verify yourself,
+        so the outcome of every case, coinflip, dice roll, and blackjack hand can be checked for
+        fairness after the fact.</p>
+      <p>Games include Cases (open solo or battle other players), Mines, Towers, Coinflip, Blackjack,
+        Dice, and Chicken. Deposit and withdraw Donuts directly through the Minecraft bot — winnings
+        can be paid back out to your Minecraft account at any time.</p>
+    </section>
   </section>
 
   <!-- ======== CASES ======== -->
@@ -501,6 +531,62 @@
     </div>
   </section>
 
+  <!-- ======== REWARDS ======== -->
+  <section class="page hidden" data-page="rewards">
+    <div class="panel fair-panel">
+      <h2>Rakeback</h2>
+      <p>Get a slice of everything you wager back, on a schedule.</p>
+      <div class="rb-grid" id="rb-grid"></div>
+    </div>
+    <div class="panel fair-panel" style="margin-top:16px">
+      <h2>Level <span id="rw-level">0</span></h2>
+      <div class="rb-bar"><div class="rb-bar-fill" id="rw-bar" style="width:0%"></div></div>
+      <p class="hint" id="rw-progress"></p>
+      <div class="rb-milestones" id="rw-milestones"></div>
+    </div>
+  </section>
+
+  <!-- ======== PROFILE ======== -->
+  <section class="page hidden" data-page="profile">
+    <div class="panel profile-head">
+      <img id="pf-avatar" class="pf-avatar" src="" alt="">
+      <div class="pf-id">
+        <strong id="pf-name"></strong>
+        <span class="pf-level">Level <span id="pf-level"></span></span>
+      </div>
+      <div class="pf-xp">
+        <div class="pf-xp-nums"><span id="pf-xp-cur"></span> / <span id="pf-xp-next"></span></div>
+        <div class="rb-bar"><div class="rb-bar-fill" id="pf-xp-bar" style="width:0%"></div></div>
+      </div>
+      <label class="pf-anon-toggle">
+        <input type="checkbox" id="pf-anon-check">
+        <span>Anonymous mode</span>
+      </label>
+    </div>
+
+    <div class="pf-stats">
+      <div class="pf-stat"><span>Total Deposited</span><strong id="pf-deposited"></strong></div>
+      <div class="pf-stat"><span>Total Withdrawn</span><strong id="pf-withdrawn"></strong></div>
+      <div class="pf-stat"><span>Total Wagered</span><strong id="pf-wagered"></strong></div>
+      <div class="pf-stat pf-profit"><span>Total Profit</span><strong id="pf-profit"></strong></div>
+    </div>
+
+    <div class="panel">
+      <h2>Transactions</h2>
+      <table class="pf-table">
+        <thead><tr><th>Date</th><th>Method</th><th>Type</th><th>Amount</th></tr></thead>
+        <tbody id="pf-tx-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ======== LEADERBOARD ======== -->
+  <section class="page hidden" data-page="leaderboard">
+    <h2 class="section-title">Top wagerers</h2>
+    <div class="lb-podium" id="lb-podium"></div>
+    <ol class="lb-list" id="lb-list"></ol>
+  </section>
+
   <!-- ======== FAIRNESS ======== -->
   <section class="page hidden" data-page="fair">
     <div class="panel fair-panel">
@@ -556,7 +642,7 @@
     <input type="text" id="picker-search" placeholder="Search for a case">
     <div class="case-grid picker-grid" id="picker-grid"></div>
     <div class="picker-foot">
-      <span id="picker-total">0 selected</span>
+      <span id="picker-total">0 selected · <span class="picker-cost coin" id="picker-cost">0</span></span>
       <button class="btn btn-ghost" id="picker-clear">Clear selection</button>
       <button class="btn btn-green" id="picker-done">Add to battle</button>
     </div>

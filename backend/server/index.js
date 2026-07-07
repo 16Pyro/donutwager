@@ -8,6 +8,9 @@ const bcrypt = require('bcryptjs');
 const { db, stmts } = require('./db');
 const fair = require('./fair');
 const games = require('./games');
+const rewards = require('./rewards');
+const SqliteStore = require('./sqliteSessionStore');
+const { startBackupSchedule } = require('./backup');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -34,6 +37,7 @@ app.use(express.json({ limit: '10kb' }));
 app.use(session({
   name: 'dw.sid',
   secret: fs.readFileSync(secretFile, 'utf8'),
+  store: new SqliteStore(),
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -110,6 +114,7 @@ function publicUser(u) {
     guest: u.username.startsWith('Guest_'),
     totalWagered: u.total_wagered / 100,
     mcUsername: u.mc_username || null,
+    anonymous: !!u.anonymous,
   };
 }
 
@@ -216,6 +221,14 @@ app.get('/api/history', requireAuth, (req, res) => {
 
 app.get('/api/leaderboard', (req, res) => {
   res.json({ top: stmts.leaderboard.all().map(u => ({ username: u.username, wagered: u.total_wagered / 100 })) });
+});
+
+app.get('/api/leaderboard/full', (req, res) => {
+  res.json({
+    top: stmts.leaderboardFull.all().map(u => ({
+      username: u.username, avatarName: u.avatarName, wagered: u.total_wagered / 100,
+    })),
+  });
 });
 
 // ---- games ---------------------------------------------------------------------
@@ -337,14 +350,66 @@ app.post('/api/mc/unlink', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+app.post('/api/anonymous', requireAuth, (req, res) => {
+  const enabled = !!(req.body || {}).enabled;
+  stmts.setAnonymous.run(enabled ? 1 : 0, req.session.userId);
+  res.json({ ok: true, anonymous: enabled });
+});
+
+// ---- rewards: rakeback + wagered level milestones ----------------------------
+
+app.get('/api/rewards', requireAuth, (req, res) => {
+  res.json(rewards.getRewards(req.session.userId));
+});
+
+app.get('/api/profile', requireAuth, (req, res) => {
+  const u = stmts.getUserById.get(req.session.userId);
+  const level = rewards.getRewards(req.session.userId).level;
+  res.json({
+    username: u.username,
+    mcUsername: u.mc_username || null,
+    level: level.level,
+    wageredCoins: level.wageredCoins,
+    curFloor: level.curFloor,
+    nextCeil: level.nextCeil,
+    totalDeposited: u.total_deposited / 100,
+    totalWithdrawn: u.total_withdrawn / 100,
+    totalWagered: u.total_wagered / 100,
+    profit: (u.balance + u.total_withdrawn - u.total_deposited) / 100,
+    transactions: stmts.myTx.all(req.session.userId).map(t => ({ ...t, amount: t.amount / 100 })),
+  });
+});
+
+app.post('/api/rewards/rakeback', requireAuth, throttle, (req, res) => {
+  try {
+    res.json(rewards.claimRakeback(req.session.userId, String((req.body || {}).kind || '')));
+  } catch (e) {
+    if (e instanceof rewards.RewardsError) return res.status(400).json({ error: e.message });
+    console.error(e);
+    res.status(500).json({ error: 'something broke on our end' });
+  }
+});
+
+app.post('/api/rewards/level', requireAuth, throttle, (req, res) => {
+  try {
+    res.json(rewards.claimLevelRewards(req.session.userId));
+  } catch (e) {
+    if (e instanceof rewards.RewardsError) return res.status(400).json({ error: e.message });
+    console.error(e);
+    res.status(500).json({ error: 'something broke on our end' });
+  }
+});
+
 app.post('/api/mc/withdraw', requireAuth, (req, res) => {
   const u = stmts.getUserById.get(req.session.userId);
   if (!u.mc_username) return res.status(400).json({ error: 'Link your Minecraft account first' });
   const amount = Math.floor(Number((req.body || {}).amount) || 0);
   if (amount < 1) return res.status(400).json({ error: 'Enter a valid amount' });
   const amountCents = amount * 100;
-  const result = stmts.tryDeduct.run(amountCents, amountCents, req.session.userId, amountCents);
+  const result = stmts.tryDeductPlain.run(amountCents, req.session.userId, amountCents);
   if (result.changes === 0) return res.status(400).json({ error: 'Not enough balance' });
+  stmts.addWithdrawn.run(amountCents, req.session.userId);
+  stmts.insertTx.run(req.session.userId, 'Minecraft', 'Withdraw', -amountCents, Date.now());
   mcBot.queueWithdraw(u.mc_username, amount, u.id);
   const updated = stmts.getUserById.get(req.session.userId);
   res.json({ ok: true, balance: updated.balance / 100 });
@@ -360,4 +425,5 @@ app.use((req, res, next) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`DonutWager running on http://localhost:${PORT}`);
   mcBot.init();
+  startBackupSchedule();
 });

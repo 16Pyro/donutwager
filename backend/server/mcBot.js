@@ -143,6 +143,8 @@ function handlePayment(bot, botName, senderName, amount) {
     stmts.fulfillLinkToken.run(senderName, user.id, token.token);
     // Add the link fee to their site balance instead of refunding in-game
     stmts.addBalance.run(amount * 100, user.id);
+    stmts.addDeposited.run(amount * 100, user.id);
+    stmts.insertTx.run(user.id, 'Minecraft', 'Deposit', amount * 100, Date.now());
     botChat(`/msg ${senderName} Linked! +${amount} added to your DonutWager balance.`);
     console.log(`[mcBot] Linked ${senderName} (user_id=${user.id}), added ${amount} to balance`);
     return;
@@ -153,6 +155,8 @@ function handlePayment(bot, botName, senderName, amount) {
   console.log(`[mcBot] Lookup ${senderName} →`, user ? `id=${user.id}` : 'NOT FOUND');
   if (user) {
     stmts.addBalance.run(amount * 100, user.id);
+    stmts.addDeposited.run(amount * 100, user.id);
+    stmts.insertTx.run(user.id, 'Minecraft', 'Deposit', amount * 100, Date.now());
     botChat(`/msg ${senderName} +${amount.toLocaleString()} Donuts added to your DonutWager balance!`);
     console.log(`[mcBot] Deposited ${amount} for ${senderName} (user_id=${user.id})`);
   } else {
