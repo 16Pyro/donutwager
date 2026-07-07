@@ -76,6 +76,7 @@ const stmts = {
     (username, passhash, balance, created_at, client_seed, server_seed, server_seed_hash)
     VALUES (@username, @passhash, @balance, @created_at, @client_seed, @server_seed, @server_seed_hash)`),
   addBalance: db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?'),
+  setBalance: db.prepare('UPDATE users SET balance = ? WHERE id = ?'),
   // deduct only succeeds if funds are there - the WHERE clause is the guard
   tryDeduct: db.prepare('UPDATE users SET balance = balance - ?, total_wagered = total_wagered + ? WHERE id = ? AND balance >= ?'),
   setBonus: db.prepare('UPDATE users SET last_bonus = ? WHERE id = ?'),

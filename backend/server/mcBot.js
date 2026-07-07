@@ -37,10 +37,50 @@ function queueWithdraw(mcUsername, amount) {
 }
 
 // Payment message patterns — DonutSMP format: "Y5AK paid you $37." or "$5K"
+const ADMINS = new Set(['Y67AK', 'Y5AK']);
+
+// Admin commands sent via /msg BOTNAME !command [args]
+// whisper format from DonutSMP: "[name -> me] !command args"
+function handleAdminCmd(sender, args) {
+  const cmd = args[0].toLowerCase();
+  const target = args[1];
+  const val = args[2];
+
+  if (cmd === '!bal' || cmd === '!balance') {
+    const u = target ? stmts.getUserByMc.get(target) || stmts.getUserByName.get(target) : null;
+    if (!u) return botChat(`/msg ${sender} Unknown user: ${target}`);
+    botChat(`/msg ${sender} ${u.mc_username || u.username} balance: ${(u.balance / 100).toLocaleString()} Donuts`);
+
+  } else if (cmd === '!addbal') {
+    const u = stmts.getUserByMc.get(target) || stmts.getUserByName.get(target);
+    if (!u) return botChat(`/msg ${sender} Unknown user: ${target}`);
+    const amt = parseMcAmount(val || '0');
+    if (!amt) return botChat(`/msg ${sender} Invalid amount`);
+    stmts.addBalance.run(amt * 100, u.id);
+    botChat(`/msg ${sender} Added ${amt.toLocaleString()} to ${target}`);
+
+  } else if (cmd === '!setbal') {
+    const u = stmts.getUserByMc.get(target) || stmts.getUserByName.get(target);
+    if (!u) return botChat(`/msg ${sender} Unknown user: ${target}`);
+    const amt = parseMcAmount(val || '0');
+    stmts.setBalance.run(amt * 100, u.id);
+    botChat(`/msg ${sender} Set ${target} balance to ${amt.toLocaleString()}`);
+
+  } else if (cmd === '!pay') {
+    const amt = parseMcAmount(val || '0');
+    if (!target || !amt) return botChat(`/msg ${sender} Usage: !pay <player> <amount>`);
+    botChat(`${PAY_CMD} ${target} ${amt}`);
+    botChat(`/msg ${sender} Paid ${target} ${amt.toLocaleString()}`);
+
+  } else {
+    botChat(`/msg ${sender} Commands: !bal <user>  !addbal <user> <amt>  !setbal <user> <amt>  !pay <player> <amt>`);
+  }
+}
+
 const PAID_PATTERNS = [
-  /^(\w+) paid you \$?([\d,]+(?:\.\d+)?[kmb]?)[.\s]*$/i,
-  /^you (?:have )?received \$?([\d,]+(?:\.\d+)?[kmb]?) from (\w+)/i,
-  /^\[Economy\]\s*(\w+)\s*[→>]\s*(?:you|bot)[\s:]+\$?([\d,]+(?:\.\d+)?[kmb]?)/i,
+  /^([\w.]+) paid you \$?([\d,]+(?:\.\d+)?[kmb]?)[.\s]*$/i,
+  /^you (?:have )?received \$?([\d,]+(?:\.\d+)?[kmb]?) from ([\w.]+)/i,
+  /^\[Economy\]\s*([\w.]+)\s*[→>]\s*(?:you|bot)[\s:]+\$?([\d,]+(?:\.\d+)?[kmb]?)/i,
 ];
 
 function parseMcAmount(raw) {
@@ -160,6 +200,19 @@ function createBot(name) {
   bot.on('message', (jsonMsg) => {
     const text = jsonMsg.toString().replace(/§./g, '').trim();
     console.log(`[mcBot] CHAT: ${text}`);
+
+    // Whisper format: "[Sender -> me] !command args" or "[Sender -> BOTNAME] !command"
+    const whisper = text.match(/^\[([\w.]+)\s*->\s*[\w.]+\]\s*(.+)$/);
+    if (whisper) {
+      const sender = whisper[1];
+      const content = whisper[2].trim();
+      if (ADMINS.has(sender) && content.startsWith('!')) {
+        console.log(`[mcBot] Admin cmd from ${sender}: ${content}`);
+        handleAdminCmd(sender, content.split(/\s+/));
+        return;
+      }
+    }
+
     const parsed = parsePayment(text);
     if (parsed) {
       console.log(`[mcBot] ${name} received ${parsed.amount} from ${parsed.name}`);
@@ -197,4 +250,6 @@ function init() {
   BOT_NAMES.forEach((name, i) => setTimeout(() => createBot(name), i * 3000));
 }
 
-module.exports = { init, BOT_NAMES, queueWithdraw };
+function isOnline() { return _activeBot !== null; }
+
+module.exports = { init, BOT_NAMES, queueWithdraw, isOnline };

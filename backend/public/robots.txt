@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://www.donutwager.org/sitemap.xml

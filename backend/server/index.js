@@ -25,12 +25,8 @@ if (!fs.existsSync(secretFile)) {
 
 app.set('trust proxy', 1);
 app.use((req, res, next) => {
-  if (process.env.NODE_ENV === 'production') {
-    const isHttp = !req.secure;
-    const isNonWww = req.headers.host && !req.headers.host.startsWith('www.');
-    if (isHttp || isNonWww) {
-      return res.redirect(301, 'https://www.donutwager.org' + req.url);
-    }
+  if (process.env.NODE_ENV === 'production' && !req.secure) {
+    return res.redirect('https://' + req.headers.host + req.url);
   }
   next();
 });
@@ -59,7 +55,7 @@ function requireAuth(req, res, next) {
 // guests can play instantly: first bet quietly creates a Guest_xxxx account
 // tied to their session. Everything still settles server-side under a real user row.
 function makeGuest() {
-  for (;;) {
+  for (; ;) {
     const username = 'Guest_' + crypto.randomInt(1000, 999999);
     if (stmts.getUserByName.get(username)) continue;
     const serverSeed = fair.newServerSeed();
@@ -163,7 +159,7 @@ app.post('/api/logout', (req, res) => {
 app.get('/api/me', (req, res) => {
   if (!req.session.userId) return res.json({ user: null });
   const u = stmts.getUserById.get(req.session.userId);
-  if (!u) { req.session.destroy(() => {}); return res.json({ user: null }); }
+  if (!u) { req.session.destroy(() => { }); return res.json({ user: null }); }
   // hand back any in-flight games so a refresh doesn't strand them
   const mines = games.minesState(u.id);
   const towers = games.towersState(u.id);
@@ -225,7 +221,7 @@ app.get('/api/leaderboard', (req, res) => {
 // ---- games ---------------------------------------------------------------------
 
 const battles = require('./battles');
-const mcBot   = require('./mcBot');
+const mcBot = require('./mcBot');
 const crypto2 = crypto; // alias
 
 function battleRoute(fn) {
@@ -314,9 +310,9 @@ app.get('/api/mc/bots', (req, res) => res.json({ bots: mcBot.BOT_NAMES }));
 
 app.post('/api/mc/link/start', (req, res) => {
   const bots = mcBot.BOT_NAMES;
-  const bot  = bots[Math.floor(Math.random() * bots.length)];
+  const bot = bots[Math.floor(Math.random() * bots.length)];
   const amount = Math.floor(Math.random() * 999) + 1;
-  const token  = crypto.randomBytes(16).toString('hex');
+  const token = crypto.randomBytes(16).toString('hex');
   const expires = Date.now() + 10 * 60 * 1000;
   stmts.insertLinkToken.run(token, bot, amount, expires);
   req.session.pendingLinkToken = token;
