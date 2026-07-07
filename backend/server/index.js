@@ -25,8 +25,12 @@ if (!fs.existsSync(secretFile)) {
 
 app.set('trust proxy', 1);
 app.use((req, res, next) => {
-  if (process.env.NODE_ENV === 'production' && !req.secure) {
-    return res.redirect('https://' + req.headers.host + req.url);
+  if (process.env.NODE_ENV === 'production') {
+    const isHttp = !req.secure;
+    const isNonWww = req.headers.host && !req.headers.host.startsWith('www.');
+    if (isHttp || isNonWww) {
+      return res.redirect(301, 'https://www.donutwager.org' + req.url);
+    }
   }
   next();
 });
