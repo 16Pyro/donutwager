@@ -24,6 +24,12 @@ if (!fs.existsSync(secretFile)) {
 }
 
 app.set('trust proxy', 1);
+app.use((req, res, next) => {
+  if (process.env.NODE_ENV === 'production' && !req.secure) {
+    return res.redirect('https://' + req.headers.host + req.url);
+  }
+  next();
+});
 app.use(express.json({ limit: '10kb' }));
 app.use(session({
   name: 'dw.sid',
