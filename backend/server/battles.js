@@ -213,6 +213,7 @@ function resolve(id, st) {
     winners: winnerSeats.map(i => st.players[i].name),
     winnerSeats,
     share: share / 100,
+    resolvedAt: Date.now(),
   };
   bstmts.update.run('done', JSON.stringify(st), id);
 }

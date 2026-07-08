@@ -891,6 +891,9 @@ function enterRoom(id, battle) {
 }
 
 function renderRoom(b) {
+  $('#jp-wrap').classList.add('hidden');
+  const recreateBtn = $('#room-recreate');
+  if (recreateBtn) recreateBtn.classList.add('hidden');
   $('#room-title').textContent = `Battle #${b.id} · ${fmt(b.cost)} entry`;
   $('#room-mode').textContent = b.mode + ' · ' + b.size;
   const isCreator = !!b.youAreCreator;
@@ -1174,13 +1177,19 @@ function jackpotSpin(players, totals, winnerSeat, dur) {
 
 async function animateBattle(b) {
   const r = b.result;
-  // if this client only found out the battle resolved a while after it actually
-  // did (slow poll tick, tab was backgrounded, etc), skip the fixed intro delay
-  // so it doesn't fall even further out of sync with everyone else watching
-  const skewMs = Date.now() - (r.resolvedAt || Date.now());
   $('#room-msg').textContent = 'Grabbing EOS Block...';
   $('#room-msg').className = 'stage-msg';
-  if (battleSpeed !== 'instant' && skewMs < 400) await sleep(550);
+  
+  if (battleSpeed !== 'instant') {
+    if (r.resolvedAt) {
+      // Start the animation roughly 2 seconds after the server resolves it to sync clients
+      const toWait = (r.resolvedAt + 2000) - Date.now();
+      if (toWait > 0 && toWait < 3000) await sleep(toWait);
+    } else {
+      await sleep(550);
+    }
+  }
+
   const h = buildBattleArena(b, true);
   const roundsN = r.rounds.length;
   $('#room-msg').textContent = `Mode: ${r.mode}. Opening…`;
@@ -1262,6 +1271,21 @@ async function animateBattle(b) {
   const winNames = [...new Set(r.winners)];
   $('#room-msg').textContent = `${winNames.join(' & ')} take${r.winners.length > 1 ? '' : 's'} the pot: ${fmt(r.pot)} (${fmt(r.share)} each)`;
   $('#room-msg').className = 'stage-msg ' + (inIt ? (iWon ? 'good' : 'bad') : '');
+
+  const recreateBtn = $('#room-recreate');
+  if (recreateBtn) {
+    recreateBtn.classList.remove('hidden');
+    recreateBtn.onclick = () => {
+      SND.click();
+      lineup = b.lineup.map(l => ({ ...l }));
+      battleMode = b.mode;
+      battleSize = b.size;
+      renderLineup();
+      $$('#mode-grid .mode-btn').forEach((x) => x.classList.toggle('active', x.dataset.bmode === battleMode));
+      $$('#size-pick .side-btn').forEach((x) => x.classList.toggle('active', x.dataset.bsize === battleSize));
+      showCasesView('create');
+    };
+  }
 }
 
 // ================= DAILY CASE =================

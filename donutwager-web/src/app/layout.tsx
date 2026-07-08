@@ -5,8 +5,30 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://www.donutwager.org"),
   title: "DonutWager | The #1 Donut SMP Gambling & Casino Platform",
   description: "Join DonutWager for the best Donut SMP gambling experience. Open cases, play casino games, and track friendly Minecraft bets. Provably fair Donut SMP betting!",
+  alternates: {
+    canonical: '/',
+  },
+  robots: {
+    index: true,
+    follow: true,
+    nocache: false,
+    googleBot: {
+      index: true,
+      follow: true,
+      noimageindex: false,
+    },
+  },
+  openGraph: {
+    title: "DonutWager | The #1 Donut SMP Gambling & Casino Platform",
+    description: "Join DonutWager for the best Donut SMP gambling experience. Open cases, play casino games, and track friendly Minecraft bets.",
+    url: "https://www.donutwager.org",
+    siteName: "DonutWager",
+    locale: "en_US",
+    type: "website",
+  },
 };
 
 export default function RootLayout({

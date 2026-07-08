@@ -1,0 +1,1 @@
+require('./backend/admin.js');

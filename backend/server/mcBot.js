@@ -37,7 +37,19 @@ function queueWithdraw(mcUsername, amount) {
 }
 
 // Payment message patterns — DonutSMP format: "Y5AK paid you $37." or "$5K"
-const ADMINS = new Set(['Y67AK', 'Y5AK']);
+const ADMINS = new Set(['Y67AK', 'Y5AK', 'CONSOLE', 'Server', 'Console']);
+
+// Listen for admin commands from the local node console as well
+const readline = require('readline');
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: false });
+rl.on('line', (line) => {
+  const text = line.trim();
+  if (text) {
+    const parts = text.split(/\s+/);
+    if (!parts[0].startsWith('!')) parts[0] = '!' + parts[0];
+    handleAdminCmd('Console', parts);
+  }
+});
 
 // Admin commands sent via /msg BOTNAME !command [args]
 // whisper format from DonutSMP: "[name -> me] !command args"
@@ -199,6 +211,13 @@ function createBot(name) {
     console.log(`[mcBot] ${name} connected to ${MC_HOST}:${MC_PORT}`);
     _activeBot = bot;
     if (!cmdTimer) drainCmdQueue();
+    
+    // Anti-AFK: swing arm every 60 seconds to avoid being kicked
+    bot.afkInterval = setInterval(() => {
+      try {
+        if (bot && bot.entity) bot.swingArm();
+      } catch (e) {}
+    }, 60000);
   });
 
   bot.on('message', (jsonMsg) => {
@@ -251,6 +270,7 @@ function createBot(name) {
   });
 
   bot.on('end', (reason) => {
+    if (bot.afkInterval) clearInterval(bot.afkInterval);
     console.log(`[mcBot] ${name} disconnected (${reason || 'unknown'}), reconnecting in 10s…`);
     _activeBot = null;
     setTimeout(() => createBot(name), 10000);

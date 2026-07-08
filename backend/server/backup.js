@@ -7,7 +7,8 @@ const path = require('path');
 const fs = require('fs');
 const { db } = require('./db');
 
-const BACKUP_DIR = path.join(__dirname, '..', 'data', 'backups');
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
+const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const KEEP = 14;                       // keep the last 14 snapshots
 const INTERVAL = 6 * 60 * 60 * 1000;   // every 6 hours
 
