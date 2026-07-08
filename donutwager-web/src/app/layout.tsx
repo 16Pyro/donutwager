@@ -5,8 +5,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "DonutWager - Minecraft SMP Gambling",
-  description: "The premier Minecraft gambling platform. Play Slots, Crash, Roulette and more.",
+  title: "DonutWager | The #1 Donut SMP Gambling & Casino Platform",
+  description: "Join DonutWager for the best Donut SMP gambling experience. Open cases, play casino games, and track friendly Minecraft bets. Provably fair Donut SMP betting!",
 };
 
 export default function RootLayout({

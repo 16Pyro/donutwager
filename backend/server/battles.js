@@ -38,7 +38,8 @@ function entryCost(lineup) {
   return lineup.reduce((s, l) => s + l.price * l.count, 0);
 }
 
-function publicBattle(id, st, full) {
+function publicBattle(id, st, full, viewerId) {
+  const youSeat = viewerId ? st.players.findIndex(p => p.id === viewerId) : -1;
   const out = {
     id,
     status: st.status,
@@ -49,6 +50,8 @@ function publicBattle(id, st, full) {
     seats: SIZES[st.size].seats,
     players: st.players.map(p => ({ name: p.name, bot: p.bot })),
     createdAt: st.createdAt,
+    youAreCreator: !!viewerId && st.players[0] && st.players[0].id === viewerId,
+    youSeat,
   };
   if (full && st.result) {
     out.result = st.result;
@@ -88,7 +91,7 @@ function create(userId, body) {
   };
   const info = bstmts.insert.run('open', JSON.stringify(st), Date.now());
   bstmts.cleanup.run(Date.now() - 30 * 60 * 1000);
-  return { id: info.lastInsertRowid, battle: publicBattle(info.lastInsertRowid, st, false) };
+  return { id: info.lastInsertRowid, battle: publicBattle(info.lastInsertRowid, st, false, userId) };
 }
 
 function join(userId, id) {
@@ -103,7 +106,7 @@ function join(userId, id) {
 
   if (st.players.length === SIZES[st.size].seats) resolve(id, st);
   else bstmts.update.run('open', JSON.stringify(st), id);
-  return publicBattle(id, st, true);
+  return publicBattle(id, st, true, userId);
 }
 
 function callBots(userId, id) {
@@ -115,7 +118,7 @@ function callBots(userId, id) {
     st.players.push({ id: null, name: BOT_NAMES[b++ % BOT_NAMES.length], bot: true });
   }
   resolve(id, st);
-  return publicBattle(id, st, true);
+  return publicBattle(id, st, true, userId);
 }
 
 // add a single bot to the next open seat (fills one card, not all)
@@ -127,7 +130,7 @@ function addBot(userId, id) {
   st.players.push({ id: null, name: BOT_NAMES[0], bot: true });
   if (st.players.length === SIZES[st.size].seats) resolve(id, st);
   else bstmts.update.run('open', JSON.stringify(st), id);
-  return publicBattle(id, st, true);
+  return publicBattle(id, st, true, userId);
 }
 
 // derive every pull from the committed battle seed - player index + round index
@@ -214,20 +217,20 @@ function resolve(id, st) {
   bstmts.update.run('done', JSON.stringify(st), id);
 }
 
-function list() {
-  return bstmts.open.all().map(r => publicBattle(r.id, JSON.parse(r.state), false));
+function list(viewerId) {
+  return bstmts.open.all().map(r => publicBattle(r.id, JSON.parse(r.state), false, viewerId));
 }
 
 // recent finished battles (with results) for the "previous battles" list
-function history() {
+function history(viewerId) {
   return bstmts.recentDone.all()
-    .map(r => publicBattle(r.id, JSON.parse(r.state), true))
+    .map(r => publicBattle(r.id, JSON.parse(r.state), true, viewerId))
     .filter(b => b.result);
 }
 
-function get(id) {
+function get(id, viewerId) {
   const { st } = load(id);
-  return publicBattle(id, st, st.status === 'done');
+  return publicBattle(id, st, st.status === 'done', viewerId);
 }
 
 module.exports = { BattleError, create, join, callBots, addBot, list, history, get };

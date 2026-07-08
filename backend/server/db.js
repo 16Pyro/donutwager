@@ -125,7 +125,7 @@ const stmts = {
     WHERE total_wagered > 0 AND username NOT LIKE 'Guest\\_%' ESCAPE '\\'
     ORDER BY total_wagered DESC LIMIT 20`),
   insertChat: db.prepare('INSERT INTO chat_messages (user_id, message, created_at) VALUES (?, ?, ?)'),
-  recentChat: db.prepare(`SELECT c.id, c.message, c.created_at,
+  recentChat: db.prepare(`SELECT c.id, c.message, c.created_at, u.total_wagered,
     CASE WHEN u.anonymous THEN 'Anonymous' ELSE u.username END AS username
     FROM chat_messages c JOIN users u ON u.id = c.user_id WHERE c.id > ? ORDER BY c.id DESC LIMIT 50`),
   getUserByMc: db.prepare('SELECT * FROM users WHERE mc_username = ? COLLATE NOCASE'),

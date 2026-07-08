@@ -7,10 +7,11 @@ const { stmts } = require('./db');
 const RB_RATE = { instant: 0.001 };
 
 // level N needs this much TOTAL wagered (coins) to reach - grows quadratically so
-// it stays a long-term grind even at this site's huge coin volumes.
+// it stays a long-term grind even at this site's huge coin volumes. Capped at 50.
 const LEVEL_UNIT = 10_000_000; // coins
+const MAX_LEVEL = 50;
 function wageredForLevel(n) { return LEVEL_UNIT * n * n; }
-function levelForWagered(coins) { return Math.floor(Math.sqrt(coins / LEVEL_UNIT)); }
+function levelForWagered(coins) { return Math.min(MAX_LEVEL, Math.floor(Math.sqrt(coins / LEVEL_UNIT))); }
 
 // milestone levels with a fixed coin reward, in coins (not cents)
 const MILESTONES = [
@@ -36,17 +37,20 @@ function rbInfo(u) {
 function levelInfo(u) {
   const wageredCoins = u.total_wagered / 100;
   const level = levelForWagered(wageredCoins);
+  const maxed = level >= MAX_LEVEL;
   const curFloor = wageredForLevel(level);
-  const nextCeil = wageredForLevel(level + 1);
-  const progress = nextCeil > curFloor ? (wageredCoins - curFloor) / (nextCeil - curFloor) : 1;
+  const nextCeil = maxed ? curFloor : wageredForLevel(level + 1);
+  const progress = maxed ? 1 : (nextCeil > curFloor ? (wageredCoins - curFloor) / (nextCeil - curFloor) : 1);
+  const remainingCoins = maxed ? 0 : Math.max(0, Math.ceil(nextCeil - wageredCoins));
   const milestones = MILESTONES.map(m => ({
     level: m.level, reward: m.reward,
     unlocked: level >= m.level,
     claimed: u.level_claimed >= m.level,
   }));
   return {
-    level, wageredCoins, progressPct: Math.round(Math.max(0, Math.min(1, progress)) * 1000) / 10,
-    curFloor, nextCeil, milestones,
+    level, maxLevel: MAX_LEVEL, maxed, wageredCoins,
+    progressPct: Math.round(Math.max(0, Math.min(1, progress)) * 1000) / 10,
+    curFloor, nextCeil, remainingCoins, milestones,
   };
 }
 
@@ -82,4 +86,4 @@ function claimLevelRewards(userId) {
   return { amount: total, levels: pending.map(m => m.level), balance: stmts.getUserById.get(userId).balance / 100 };
 }
 
-module.exports = { getRewards, claimRakeback, claimLevelRewards, RewardsError };
+module.exports = { getRewards, claimRakeback, claimLevelRewards, levelForWagered, RewardsError };

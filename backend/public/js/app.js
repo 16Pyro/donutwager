@@ -6,6 +6,8 @@ const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 
 let me = null; // { username, balance, ... }
+// matches server/db.js - the name shown for anyone in anonymous mode
+const HIDDEN_NAME = 'Anonymous';
 
 // ---------- tiny api helper ----------
 async function api(path, body) {
@@ -16,23 +18,15 @@ async function api(path, body) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'request failed');
-  // first guest bet just created an account server-side - pick up the identity
-  if (!me && data && data.balance !== undefined) loadMe();
+  // opportunistically refresh identity if we don't have one cached yet (e.g.
+  // right after a Minecraft link gets confirmed) - cheap no-op otherwise
+  if (!me && path !== 'me') await loadMe();
   return data;
 }
 
 async function loadMe() {
   try { applyUser((await api('me')).user); } catch {}
 }
-
-// Poll balance every 10s so deposits show up automatically
-setInterval(async () => {
-  if (!me) return;
-  try {
-    const d = await api('me');
-    if (d.user && d.user.balance !== me.balance) setBalance(d.user.balance);
-  } catch {}
-}, 10000);
 
 // 2500000000 -> "2.5B", 1500 -> "1.5K", 42.5 -> "42.50"
 function fmt(n) {
@@ -143,22 +137,23 @@ const SND = (() => {
   };
 })();
 
-const soundBtn = $('#sound-toggle');
-soundBtn.textContent = SND.muted ? '🔇' : '🔊';
-soundBtn.onclick = () => { soundBtn.textContent = SND.toggle() ? '🔇' : '🔊'; };
-
 // ---------- routing ----------
+let lastRoutedPage = null;
 function route() {
   const page = (location.hash.replace('#/', '') || 'home').split('?')[0];
   const target = $(`[data-page="${page}"]`) ? page : 'home';
+  // leaving Cases (whether you were on single-case or spectating a battle) always
+  // resets back to the battles lobby for next time - it should never resume in place
+  if (lastRoutedPage === 'cases' && target !== 'cases') showCasesView('battles');
+  lastRoutedPage = target;
   $$('.page').forEach((p) => p.classList.toggle('hidden', p.dataset.page !== target));
   $$('.sidenav a[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === target));
   if (target === 'fair') renderFair();
-  if (target === 'deposit') renderDeposit();
-  if (target === 'rewards') renderRewards();
-  if (target === 'profile') renderProfile();
-  if (target === 'leaderboard') renderLeaderboard();
   if (target === 'cases') refreshBattles();
+  if (target === 'leaderboard') renderLeaderboard();
+  if (target === 'rewards') renderRewards();
+  if (target === 'stats') renderStats();
+  if (target === 'settings') renderSettings();
   syncActiveGame(target);
   document.body.classList.remove('nav-open');
   window.scrollTo(0, 0);
@@ -207,13 +202,17 @@ async function syncActiveGame(page) {
   catch {} finally { activeSyncing = false; }
 }
 
-// ---------- auth ----------
+// ---------- auth (Minecraft account linking - no passwords) ----------
 function showModal(name) {
   $('#modal-backdrop').classList.remove('hidden');
-  $('#modal-login').classList.toggle('hidden', name !== 'login');
-  $('#modal-register').classList.toggle('hidden', name !== 'register');
+  $('#modal-link').classList.toggle('hidden', name !== 'link');
+  $('#modal-deposit').classList.toggle('hidden', name !== 'deposit');
+  $('#modal-withdraw').classList.toggle('hidden', name !== 'withdraw');
+  if (name === 'link') openLinkModal();
+  if (name === 'deposit') openDepositModal();
+  if (name === 'withdraw') { $('#withdraw-error').textContent = ''; $('#withdraw-amount').value = ''; }
 }
-function hideModal() { $('#modal-backdrop').classList.add('hidden'); }
+function hideModal() { $('#modal-backdrop').classList.add('hidden'); stopLinkPoll(); }
 
 document.addEventListener('click', (e) => {
   const m = e.target.closest('[data-modal]');
@@ -221,110 +220,120 @@ document.addEventListener('click', (e) => {
 });
 $('#modal-backdrop').addEventListener('click', (e) => { if (e.target.id === 'modal-backdrop') hideModal(); });
 
-function applyUser(user) {
-  me = user;
-  $('#wallet').classList.toggle('hidden', !user);
-  $('#user-menu').classList.toggle('hidden', !user);
-  $('#mc-link-btn').classList.toggle('hidden', !!(user && user.mcUsername));
-  if (user) {
-    $('#username-text').textContent = user.anonymous ? 'Anonymous' : user.username;
-    $('#balance').textContent = fmt(user.balance);
+// ---- deposit / withdraw (bot-verified, no passwords) ----
+let _botNames = null;
+let _depositBot = 'AALV1N';
+function updateDepositCmd() {
+  const raw = $('#deposit-amount').value.trim();
+  const amount = parseAmt(raw);
+  const amountText = amount > 0 ? Math.floor(amount) : '<amount>';
+  $('#deposit-cmd').textContent = `/pay ${_depositBot} ${amountText}`;
+}
+async function openDepositModal() {
+  if (!_botNames) {
+    try { const d = await api('mc/bots'); _botNames = d.bots; } catch { _botNames = ['AALV1N']; }
   }
-  // re-render deposit page if it's currently visible
-  if (!$('[data-page="deposit"]').classList.contains('hidden')) renderDeposit();
+  _depositBot = _botNames[0];
+  $('#deposit-amount').value = '';
+  updateDepositCmd();
 }
+$('#deposit-amount').addEventListener('input', updateDepositCmd);
+$('#deposit-close-btn').onclick = hideModal;
 
-$('#logout-btn').onclick = async () => { await api('logout', {}); applyUser(null); location.hash = '#/'; };
-
-// ---- MC linking ----
-function mcShowPanel(id) {
-  ['mc-link-start','mc-link-pending','mc-link-linked']
-    .forEach(p => $('#' + p).classList.toggle('hidden', p !== id));
-}
-
-function openMcModal() {
-  $('#mc-modal-backdrop').classList.remove('hidden');
-  if (me && me.mcUsername) {
-    $('#mc-linked-name').textContent = me.mcUsername;
-    mcShowPanel('mc-link-linked');
-  } else {
-    mcShowPanel('mc-link-start');
-  }
-}
-
-$('#mc-link-btn').onclick = openMcModal;
-$('#mc-modal-close').onclick = () => $('#mc-modal-backdrop').classList.add('hidden');
-$('#mc-modal-backdrop').addEventListener('click', (e) => { if (e.target.id === 'mc-modal-backdrop') $('#mc-modal-backdrop').classList.add('hidden'); });
-
-$('#mc-link-generate').onclick = async () => {
-  try {
-    const d = await api('mc/link/start', {});
-    $('#mc-link-cmd').textContent = `/pay ${d.bot} ${d.amount}`;
-    mcShowPanel('mc-link-pending');
-  } catch (e) { toast(e.message); }
-};
-
-$('#mc-link-check').onclick = async () => {
-  try {
-    const d = await api('mc/link/poll');
-    if (d.status === 'linked') {
-      applyUser(d.user);
-      $('#mc-linked-name').textContent = d.user.mcUsername;
-      mcShowPanel('mc-link-linked');
-      toast('✅ Logged in as ' + d.user.username, true);
-    } else {
-      toast('Not linked yet — make sure you typed the command in-game.');
-    }
-  } catch (e) { toast(e.message); }
-};
-
-$('#mc-unlink-btn').onclick = async () => {
-  try {
-    await api('mc/unlink', {});
-    if (me) me.mcUsername = null;
-    mcShowPanel('mc-link-start');
-    toast('Minecraft account unlinked.');
-  } catch (e) { toast(e.message); }
-};
-
-// ---- Withdraw ----
-$('#deposit-btn').onclick = async () => {
-  if (!me || !me.mcUsername) { toast('Link your Minecraft account first.'); return; }
-  if (!_botNames) { try { const d = await api('mc/bots'); _botNames = d.bots; } catch { _botNames = ['AALV1N']; } }
-  $('#deposit-modal-amount').value = '';
-  $('#deposit-modal-cmd').classList.add('hidden');
-  $('#deposit-modal-backdrop').classList.remove('hidden');
-};
-$('#deposit-modal-close').onclick = () => $('#deposit-modal-backdrop').classList.add('hidden');
-$('#deposit-modal-backdrop').addEventListener('click', (e) => { if (e.target.id === 'deposit-modal-backdrop') $('#deposit-modal-backdrop').classList.add('hidden'); });
-$('#deposit-modal-generate').onclick = () => {
-  const raw = $('#deposit-modal-amount').value.trim();
-  if (!raw || !parseAmt(raw)) { toast('Enter a valid amount.'); return; }
-  const bot = (_botNames || ['AALV1N'])[0];
-  $('#deposit-modal-code').textContent = `/pay ${bot} ${raw}`;
-  $('#deposit-modal-cmd').classList.remove('hidden');
-};
-
-$('#withdraw-btn').onclick = () => {
-  if (!me || !me.mcUsername) { toast('Link your Minecraft account first.'); return; }
+$('#withdraw-go-btn').onclick = async () => {
   $('#withdraw-error').textContent = '';
-  $('#withdraw-amount').value = '';
-  $('#withdraw-modal-backdrop').classList.remove('hidden');
-};
-$('#withdraw-close').onclick = () => $('#withdraw-modal-backdrop').classList.add('hidden');
-$('#withdraw-modal-backdrop').addEventListener('click', (e) => { if (e.target.id === 'withdraw-modal-backdrop') $('#withdraw-modal-backdrop').classList.add('hidden'); });
-$('#withdraw-max').onclick = () => { if (me) $('#withdraw-amount').value = fmt(me.balance); };
-$('#withdraw-submit').onclick = async () => {
   const amount = parseAmt($('#withdraw-amount').value);
-  if (!amount || amount < 1) { $('#withdraw-error').textContent = 'Enter a valid amount.'; return; }
+  if (!amount || amount < 1) { $('#withdraw-error').textContent = 'Enter a valid amount'; return; }
   try {
-    const d = await api('mc/withdraw', { amount });
+    const d = await api('mc/withdraw', { amount: Math.floor(amount) });
     setBalance(d.balance);
-    $('#withdraw-modal-backdrop').classList.add('hidden');
-    toast(`Withdrawal sent — check your Minecraft chat!`, true);
+    hideModal();
+    toast('Withdrawal sent — check in-game!', true);
   } catch (e) { $('#withdraw-error').textContent = e.message; }
 };
 
+$('#wallet-deposit-btn').onclick = () => showModal('deposit');
+$('#wallet-withdraw-btn').onclick = () => showModal('withdraw');
+
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.copy-btn');
+  if (!btn) return;
+  const text = $('#' + btn.dataset.copy).textContent;
+  navigator.clipboard.writeText(text).then(() => toast('Copied to clipboard', true)).catch(() => toast('Could not copy'));
+});
+
+function applyUser(user) {
+  me = user;
+  $('#wallet').classList.toggle('hidden', !user);
+  $('#rewards-btn').classList.toggle('hidden', !user);
+  $('#auth-buttons').classList.toggle('hidden', !!(user && user.mcUsername));
+  $('#user-menu').classList.toggle('hidden', !user);
+  if (user) {
+    $('#username-label').textContent = user.mcUsername || user.username;
+    $('#balance').textContent = fmt(user.balance);
+    $('#profile-avatar').src = `https://minotar.net/helm/${user.mcUsername || user.username}/64.png`;
+    $('#profile-avatar').alt = `${user.mcUsername || user.username} avatar`;
+  }
+}
+
+// ---- Minecraft account linking flow: generate a bot + amount to /pay ->
+// poll until the bot detects the in-game payment (see server/mcBot.js) ----
+let linkPollId = null;
+function stopLinkPoll() { clearInterval(linkPollId); linkPollId = null; }
+function showLinkStep(step) {
+  $('#link-step-start').classList.toggle('hidden', step !== 'start');
+  $('#link-step-pay').classList.toggle('hidden', step !== 'pay');
+}
+async function openLinkModal() {
+  $('#link-error').textContent = '';
+  try {
+    const s = await api('mc/link/poll');
+    if (s.status === 'pending') showLinkPending();
+    else showLinkStep('start');
+  } catch { showLinkStep('start'); }
+}
+function updateLinkExpiry(expiresAt) {
+  const left = expiresAt - Date.now();
+  $('#link-expiry').textContent = left > 0 ? `Code expires in ${Math.ceil(left / 60000)} min` : 'Code expired — generate a new one';
+}
+function showLinkPending(d) {
+  showLinkStep('pay');
+  if (d) {
+    $('#link-cmd').textContent = `/pay ${d.bot} ${d.amount}`;
+    updateLinkExpiry(d.expiresAt);
+    stopLinkPoll();
+    linkPollId = setInterval(() => pollLinkStatus(d.expiresAt), 3000);
+  }
+}
+async function pollLinkStatus(expiresAt) {
+  if (expiresAt) updateLinkExpiry(expiresAt);
+  try {
+    const s = await api('mc/link/poll');
+    if (s.status === 'linked') {
+      stopLinkPoll();
+      applyUser(s.user);
+      hideModal();
+      toast(`Linked! Welcome, ${s.user.mcUsername || s.user.username}.`, true);
+    } else if (s.status === 'expired' || s.status === 'no_token') {
+      stopLinkPoll();
+      showLinkStep('start');
+    }
+  } catch {}
+}
+$('#link-start-btn').onclick = async () => {
+  $('#link-error').textContent = '';
+  try {
+    const d = await api('mc/link/start', {});
+    SND.click();
+    showLinkPending(d);
+  } catch (e) { $('#link-error').textContent = e.message; }
+};
+$('#link-cancel-btn').onclick = () => {
+  stopLinkPoll();
+  showLinkStep('start');
+};
+
+$('#settings-logout-btn').onclick = async () => { await api('logout', {}); applyUser(null); location.hash = '#/'; };
 
 // ---------- bet amount helpers ----------
 document.addEventListener('click', (e) => {
@@ -339,9 +348,18 @@ const amt = (id) => $('#' + id).value;
 
 // ---------- sidebar / chat toggles ----------
 $('#burger').onclick = () => document.body.classList.toggle('nav-open');
-$('#chat-toggle').onclick = (e) => { e.preventDefault(); document.body.classList.toggle('chat-closed'); };
 $('#chat-close').onclick = () => document.body.classList.add('chat-closed');
 if (window.innerWidth < 1100) document.body.classList.add('chat-closed');
+
+// ---------- profile dropdown ----------
+$('#profile-btn').onclick = (e) => { e.stopPropagation(); $('#profile-dropdown').classList.toggle('hidden'); };
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#user-menu')) $('#profile-dropdown').classList.add('hidden');
+});
+$('#dd-rewards-btn').onclick = () => { $('#profile-dropdown').classList.add('hidden'); location.hash = '#/rewards'; };
+$('#rewards-btn').onclick = () => { location.hash = '#/rewards'; };
+$('#dd-stats-btn').onclick = () => { $('#profile-dropdown').classList.add('hidden'); location.hash = '#/stats'; };
+$('#dd-settings-btn').onclick = () => { $('#profile-dropdown').classList.add('hidden'); location.hash = '#/settings'; };
 
 // ================= CASES: shared bits =================
 let caseList = [];          // array of public cases (fixed price, item values)
@@ -390,72 +408,56 @@ function luxCaseTile(c) {
   return el;
 }
 
-// pixel-art Minecraft chest, tinted by the case theme via --ct (metal bands).
-// crispEdges keeps the blocky look consistent with the site.
-const CHEST_SVG = `<svg class="chest" viewBox="0 0 48 44" shape-rendering="crispEdges" aria-hidden="true">
-  <rect x="7" y="41" width="34" height="2" fill="#00000055"/>
-  <!-- body (wood) -->
-  <rect x="7" y="20" width="34" height="20" fill="#6b4a2b"/>
-  <rect x="7" y="20" width="34" height="3" fill="#7d5834"/>
-  <rect x="7" y="36" width="34" height="4" fill="#4e3620"/>
-  <!-- lid (wood, lighter) -->
-  <rect x="7" y="7" width="34" height="13" fill="#7a5432"/>
-  <rect x="7" y="7" width="34" height="3" fill="#8f6540"/>
-  <!-- plank seams -->
-  <rect x="18" y="7" width="1" height="33" fill="#00000030"/>
-  <rect x="30" y="7" width="1" height="33" fill="#00000030"/>
-  <!-- iron trim (theme colour) -->
-  <rect x="7" y="7" width="34" height="2" fill="var(--ct)"/>
-  <rect x="7" y="18" width="34" height="3" fill="var(--ct)"/>
-  <rect x="7" y="38" width="34" height="2" fill="var(--ct)"/>
-  <rect x="7" y="7" width="2" height="33" fill="var(--ct)"/>
-  <rect x="39" y="7" width="2" height="33" fill="var(--ct)"/>
-  <!-- lock plate -->
-  <rect x="21" y="17" width="6" height="8" fill="var(--ct)"/>
-  <rect x="23" y="20" width="2" height="3" fill="#20140a"/>
-</svg>`;
-
 // shared case-object markup so single-case and battles look identical:
-// a themed chest with the case's hero item floating above it as the prize.
+// just the case's hero item, big, on a themed glow disc - no chest prop.
 function caseObjHTML(c, cls = '') {
   const th = caseTheme(c);
   return `<div class="case-obj ${cls}" style="--ct:${th.c};--ctg:${th.g}">
     <div class="case-glow"></div>
     <img class="case-item" src="/img/items/${c.cover}.png" alt="${c.name} case">
-    ${CHEST_SVG}</div>`;
+  </div>`;
 }
 
 function reelItemEl(item) {
   const div = document.createElement('div');
   div.className = 'reel-item rarity-' + item.rarity;
-  div.innerHTML = `${itemIcon(item)}<b>${item.name}</b><span class="mult">${fmt(item.value)}</span>`;
+  div.innerHTML = `${itemIcon(item)}<b>${item.name}</b><span class="mult">${fmt(item.value ?? item.amount)}</span>`;
   return div;
 }
 
 // build a long strip of weighted-random filler with the real drop at a fixed slot,
 // then slide the strip so the needle lands on it. Visual only - result is server-decided.
+// used only by the Daily Case (not the muted Cases page), so it keeps real sound.
 function spinReel(items, winIdx, reelSel = '#case-reel') {
   const reel = $(reelSel);
   reel.style.transition = 'none';
   reel.style.transform = 'translateX(0)';
   reel.innerHTML = '';
   const SLOTS = 40, WIN_SLOT = 34, W = 116; // item width + gap
+  const DUR = 4200;
   const weightPick = () => {
     let r = Math.random() * items.reduce((s, i) => s + i.chance, 0);
     for (const i of items) { r -= i.chance; if (r <= 0) return i; }
     return items[0];
   };
   for (let s = 0; s < SLOTS; s++) reel.appendChild(reelItemEl(s === WIN_SLOT ? items[winIdx] : weightPick()));
+  const winEl = reel.children[WIN_SLOT];
   const windowW = reel.parentElement.clientWidth;
-  const jitter = (Math.random() - 0.5) * 60;
-  const target = WIN_SLOT * W + W / 2 - windowW / 2 + jitter;
+  // land dead-center under the needle line - no jitter
+  const target = WIN_SLOT * W + W / 2 - windowW / 2;
   requestAnimationFrame(() => requestAnimationFrame(() => {
-    reel.style.transition = 'transform 4.2s cubic-bezier(.12,.6,.08,1)';
+    reel.style.transition = `transform ${DUR}ms cubic-bezier(.45,.05,.15,1)`;
     reel.style.transform = `translateX(${-target}px)`;
   }));
-  let t = 0; const ticks = [];
-  for (let dt = 40; t < 4000; dt *= 1.09) { t += dt; ticks.push(t); }
-  ticks.forEach((ms) => setTimeout(SND.tick, ms));
+  // guard every sound with "are we still looking at the daily case" so leaving
+  // mid-spin doesn't leave ticks/win jingle playing behind you
+  driveReelTicks(reel, W, 'x', DUR, () => { if (onDailyPage()) SND.tick(); });
+  // once it settles dead-center, pop the winning item so it's unmistakable what you pulled
+  setTimeout(() => winEl.classList.add('bt-win-pop'), DUR);
+}
+function onDailyPage() {
+  const p = $('[data-page="daily"]');
+  return !!p && !p.classList.contains('hidden');
 }
 
 async function loadCases() {
@@ -560,6 +562,8 @@ async function openSingle() {
   catch (e) { toast(e.message); return; }
 
   caseSpinning = true; btn.disabled = true;
+  msg.textContent = 'Grabbing EOS Block...'; msg.className = 'stage-msg';
+  await sleep(550);
   msg.textContent = 'Opening…'; msg.className = 'stage-msg';
   const pool = detailCase.items;
   // the rarest pull drives the intensity of the climax
@@ -567,7 +571,7 @@ async function openSingle() {
 
   // darken + build one vertical slide spinner per opened case (like battles)
   stage.classList.add('dim');
-  arena.innerHTML = '<div class="cs-spins"></div>';
+  arena.innerHTML = '<div class="cs-spins fit-row"></div>';
   const spinsWrap = arena.querySelector('.cs-spins');
   const reels = d.results.map(() => {
     const col = document.createElement('div');
@@ -583,7 +587,6 @@ async function openSingle() {
   // land: flourish scaled by the best pull
   reels.forEach((reel) => reel.parentElement.classList.add('landed'));
   if (top.flash) screenFlash(stage);
-  if (top.shake) screenShake(stage);
   if (top.tier >= 5) SND.impact(top.tier === 6 ? 1 : 0.7); else SND.reveal(top.tier);
   await sleep(200);
 
@@ -611,6 +614,7 @@ let battleSpeed = 'normal', battleMode = 'standard', battleSize = '1v1';
 let lineup = [];            // [{caseId, count}]
 let watchingId = null;      // battle id currently in the room
 let roomPoll = null, animatedDone = false;
+let lastArenaFp = null;     // fingerprint of the last-rendered open-lobby seat state
 
 function showCasesView(view) {
   $('#battles-view').classList.toggle('hidden', view !== 'battles');
@@ -671,7 +675,13 @@ function renderLineup() {
   if (addBtn) wrap.appendChild(addBtn); // keep the add tile at the end of the row
   updateTotal();
 }
-function updateTotal() { $('#battle-total').textContent = fmt(battleTotal()); }
+function updateTotal() {
+  const total = battleTotal();
+  $('#battle-total').textContent = fmt(total);
+  const costBadge = $('#battle-create-btn-cost');
+  costBadge.classList.toggle('hidden', total <= 0);
+  costBadge.textContent = ` - ${fmt(total)}`;
+}
 
 // ---- case picker modal ----
 let pickerSel = {};   // caseId -> count (working copy)
@@ -698,24 +708,34 @@ function renderPicker(q) {
         el.classList.add('selected');
         const badge = document.createElement('span');
         badge.className = 'sel-count'; badge.textContent = 'x' + pickerSel[c.id];
-        badge.onclick = (e) => { e.stopPropagation(); delete pickerSel[c.id]; renderPicker($('#picker-search').value.toLowerCase()); };
         el.appendChild(badge);
+        const minus = document.createElement('button');
+        minus.className = 'btn btn-ghost btn-tiny sel-minus-btn'; minus.title = 'remove one'; minus.textContent = '− Remove one';
+        minus.onclick = (e) => {
+          e.stopPropagation();
+          if (pickerSel[c.id] > 1) pickerSel[c.id]--; else delete pickerSel[c.id];
+          renderPicker($('#picker-search').value.toLowerCase());
+        };
+        el.appendChild(minus);
       }
       grid.appendChild(el);
     });
-  const total = Object.values(pickerSel).reduce((s, n) => s + n, 0);
+  const count = Object.values(pickerSel).reduce((s, n) => s + n, 0);
   const cost = Object.entries(pickerSel).reduce((s, [id, n]) => s + (caseById[id]?.price || 0) * n, 0);
-  $('#picker-total').innerHTML = `${total} selected · <span class="picker-cost coin" id="picker-cost">${fmt(cost)}</span>`;
+  $('#picker-total').innerHTML = `${count} selected · <span class="coin">${fmt(cost)}</span>`;
 }
 $('#picker-search').addEventListener('input', (e) => renderPicker(e.target.value.toLowerCase()));
-$('#picker-close').onclick = () => $('#picker-backdrop').classList.add('hidden');
-$('#picker-backdrop').addEventListener('click', (e) => { if (e.target.id === 'picker-backdrop') $('#picker-backdrop').classList.add('hidden'); });
-$('#picker-clear').onclick = () => { pickerSel = {}; renderPicker($('#picker-search').value.toLowerCase()); };
-$('#picker-done').onclick = () => {
+// closing the picker any way (X, clicking off to the side, or Done) keeps the
+// selection - there's no separate "discard" action, so it should just save
+function commitPicker() {
   lineup = Object.entries(pickerSel).map(([caseId, count]) => ({ caseId, count }));
   $('#picker-backdrop').classList.add('hidden');
   renderLineup();
-};
+}
+$('#picker-close').onclick = commitPicker;
+$('#picker-backdrop').addEventListener('click', (e) => { if (e.target.id === 'picker-backdrop') commitPicker(); });
+$('#picker-clear').onclick = () => { pickerSel = {}; renderPicker($('#picker-search').value.toLowerCase()); };
+$('#picker-done').onclick = commitPicker;
 $('#lineup-add-btn').onclick = openPicker;
 
 $('#battle-create-go').onclick = async () => {
@@ -739,7 +759,7 @@ async function refreshBattles() {
   } catch {}
   refreshHistory();
 }
-setInterval(refreshBattles, 5000);
+setInterval(refreshBattles, 2000);
 
 // ---- previous (finished) battles ----
 function historyRow(b) {
@@ -765,8 +785,8 @@ function historyRow(b) {
     const won = r.winnerSeats.includes(i);
     const cell = document.createElement('div');
     cell.className = 'hr-player ' + (won ? 'won' : 'lost');
-    const skin = skinFor((p.name || '?') + ':' + i);
-    cell.innerHTML = `<div class="hr-pfp"><img src="https://minotar.net/helm/${skin}/40.png" alt="${p.name || 'player'} skin" loading="lazy">${won ? '<span class="hr-crown">🏆</span>' : ''}</div>
+    const skin = avatarSkin(p, (p.name || '?') + ':' + i);
+    cell.innerHTML = `<div class="hr-pfp"><img src="https://minotar.net/helm/${skin}/40.png" alt="${p.name} avatar" loading="lazy">${won ? '<span class="hr-crown">🏆</span>' : ''}</div>
       <span class="hr-name">${p.name}</span>
       <span class="hr-amt">${won ? '+' + fmt(r.share) : fmt(r.totals[i])}</span>`;
     players.appendChild(cell);
@@ -798,7 +818,7 @@ function seatEls(b) {
     const seat = document.createElement('span');
     const p = b.players[i];
     seat.className = 'b-seat' + (p ? ' filled' + (p.bot ? ' bot' : '') : '');
-    seat.textContent = p ? p.name[p.bot ? 4 : 0].toUpperCase() : '·';
+    seat.innerHTML = p ? `<img src="https://minotar.net/helm/${avatarSkin(p, p.name + ':' + i)}/32.png" alt="${p.name} avatar" loading="lazy">` : '·';
     seat.title = p ? p.name : 'open seat';
     frag.appendChild(seat);
   }
@@ -815,7 +835,7 @@ function battleRow(b) {
   b.lineup.forEach((l) => {
     const c = document.createElement('span');
     c.className = 'b-case clickable';
-    c.innerHTML = `<img src="/img/items/${l.cover}.png" alt="${l.name} case">` + (l.count > 1 ? `<i>x${l.count}</i>` : '');
+    c.innerHTML = `<img src="/img/items/${l.cover}.png" alt="${l.name}">` + (l.count > 1 ? `<i>x${l.count}</i>` : '');
     c.title = `${l.name} — click to see drops`;
     c.onclick = (e) => { e.stopPropagation(); showCasePeek(l.caseId); };
     cases.appendChild(c);
@@ -828,7 +848,14 @@ function battleRow(b) {
   players.className = 'b-players';
   players.appendChild(seatEls(b));
   row.appendChild(players);
-  const isMine = me && b.players.some((p) => p.name === me.username);
+  const isMine = (b.youSeat ?? -1) >= 0;
+  const actions = document.createElement('span');
+  actions.className = 'b-actions';
+  const peek = document.createElement('button');
+  peek.className = 'btn btn-ghost btn-small b-peek'; peek.title = 'Spectate this battle';
+  peek.innerHTML = `<img src="/img/icons/eye.png" alt="Preview drops">`;
+  peek.onclick = (e) => { e.stopPropagation(); SND.click(); enterRoom(b.id); };
+  actions.appendChild(peek);
   const btn = document.createElement('button');
   btn.className = 'btn ' + (isMine ? 'btn-ghost' : 'btn-green');
   btn.textContent = isMine ? 'View' : `Join for ${fmt(b.cost)}`;
@@ -840,13 +867,15 @@ function battleRow(b) {
       enterRoom(b.id, d.battle);
     } catch (e) { toast(e.message); }
   };
-  row.appendChild(btn);
+  actions.appendChild(btn);
+  row.appendChild(actions);
   return row;
 }
 
 function enterRoom(id, battle) {
   watchingId = id;
   animatedDone = false;
+  lastArenaFp = null;
   showCasesView('room');
   $('#room-msg').textContent = '';
   if (battle) renderRoom(battle);
@@ -856,21 +885,35 @@ function enterRoom(id, battle) {
   };
   if (!battle || battle.status !== 'done') poll();
   clearInterval(roomPoll);
-  roomPoll = setInterval(poll, 2500);
+  // fast enough that every spectator learns "done" within a few hundred ms of
+  // each other, not a second - see animateBattle()'s resolvedAt skew-catchup too
+  roomPoll = setInterval(poll, 350);
 }
 
 function renderRoom(b) {
   $('#room-title').textContent = `Battle #${b.id} · ${fmt(b.cost)} entry`;
   $('#room-mode').textContent = b.mode + ' · ' + b.size;
-  const isCreator = me && b.players[0] && b.players[0].name === me.username;
-  $('#room-bots').classList.toggle('hidden', !(b.status === 'open' && isCreator));
-  $('#room-bots').onclick = async () => {
+  const isCreator = !!b.youAreCreator;
+  const botsBtn = $('#room-bots');
+  botsBtn.classList.toggle('hidden', !(b.status === 'open' && isCreator));
+  botsBtn.disabled = false;
+  botsBtn.onclick = async () => {
+    if (botsBtn.disabled) return; // guard against double-clicks firing duplicate requests
+    botsBtn.disabled = true;
     try { renderRoom((await api('battles/bots', { id: b.id })).battle); }
-    catch (e) { toast(e.message); }
+    catch (e) {
+      // another click (or the poller) already resolved this battle - not a real error
+      if (!/already started/i.test(e.message)) toast(e.message);
+      botsBtn.disabled = false;
+    }
   };
 
   if (b.status === 'open') {
-    buildBattleArena(b, false);
+    // only rebuild the seat DOM when it actually changed - rebuilding on every
+    // 350ms poll tick (even when nobody joined) can yank a button out from under
+    // an in-progress click, which is why "Add Bot" used to need several tries
+    const fp = b.status + '|' + b.players.map(p => p.name + (p.bot ? '1' : '0')).join(',');
+    if (fp !== lastArenaFp) { lastArenaFp = fp; buildBattleArena(b, false); }
     $('#room-msg').textContent = `Waiting for players (${b.players.length}/${b.seats})...`;
     $('#room-msg').className = 'stage-msg';
     return;
@@ -884,11 +927,17 @@ function renderRoom(b) {
 }
 
 // drop a single bot into the next open seat, then re-render the room
+let addBotInFlight = false;
 async function addBotToBattle(id) {
+  if (addBotInFlight) return; // guard against double-clicks firing duplicate requests
+  addBotInFlight = true;
   try {
     SND.click();
     renderRoom((await api('battles/addbot', { id })).battle);
-  } catch (e) { toast(e.message); }
+  } catch (e) {
+    // another click (or the poller) already changed this seat - not a real error
+    if (!/already started|battle is full/i.test(e.message)) toast(e.message);
+  } finally { addBotInFlight = false; }
 }
 
 // popover showing a case's full drop table (item, value, chance %)
@@ -921,17 +970,21 @@ const RCOLOR = {
   junk: ['#8b93a7', '#8b93a7'], common: ['#c3ccdd', '#9fb0cc'], uncommon: ['#4ade80', '#22c55e'],
   rare: ['#4f8cff', '#2f6bff'], epic: ['#b06eff', '#a855f7'], legendary: ['#ffb020', '#ff8a00'], hero: ['#ffe259', '#ffc21a'],
 };
-// player/bot avatars use randomized Minecraft skins (deterministic per seat so
-// they don't flicker across the 2.5s room polls)
+// bots aren't real Minecraft accounts, so they get a randomized placeholder
+// skin (deterministic per seat so it doesn't flicker across the 2.5s room polls).
+// Real players always render their own actual skin via their username.
 const AV_SKINS = ['y5ak', 'y67ak'];
 function skinFor(key) {
   let h = 0; for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
   return AV_SKINS[h % AV_SKINS.length];
 }
+function avatarSkin(p, seatKey) {
+  return p.bot ? skinFor(seatKey) : p.name;
+}
 function playerAvatarHTML(p, seat = 0) {
   if (!p) return `<div class="bt-avatar empty">·</div>`;
-  const skin = skinFor((p.name || '?') + ':' + seat);
-  return `<div class="bt-avatar${p.bot ? ' bot' : ''}"><img src="https://minotar.net/helm/${skin}/48.png" alt="${p.name || 'player'} skin" loading="lazy"></div>`;
+  const skin = avatarSkin(p, (p.name || '?') + ':' + seat);
+  return `<div class="bt-avatar${p.bot ? ' bot' : ''}"><img src="https://minotar.net/helm/${skin}/48.png" alt="${p.name} avatar" loading="lazy"></div>`;
 }
 function weightedPick(items) {
   let r = Math.random() * items.reduce((s, i) => s + i.chance, 0);
@@ -985,7 +1038,8 @@ function buildBattleArena(b, playing) {
   if (teamed) cols.classList.add('has-teams');
   const TEAM_C = ['#6fbf3f', '#e05b4b', '#f3c94b', '#55e0cf'];
   const seats = playing ? b.players.length : b.seats;
-  const isCreator = me && b.players[0] && !b.players[0].bot && b.players[0].name === me.username;
+  const isCreator = !!b.youAreCreator;
+  const isSpectator = (b.youSeat ?? -1) < 0;
   const handles = { reels: [], vals: [], invs: [], wons: [], colEls: [], counter, strip };
   for (let i = 0; i < seats; i++) {
     const team = Math.floor(i / per);
@@ -998,11 +1052,14 @@ function buildBattleArena(b, playing) {
     const col = document.createElement('div');
     col.className = 'bt-col' + (teamed ? ' teamed' : '') + (emptySeat ? ' open' : '');
     if (teamed) col.style.setProperty('--team-c', TEAM_C[team % TEAM_C.length]);
-    // waiting on an empty seat: offer to drop a single bot into THIS card
+    // waiting on an empty seat: creator can drop in a bot, a spectator can join it,
+    // everyone else (already in the battle) just waits
     const body = emptySeat
       ? `<div class="bt-openseat">${isCreator
           ? `<button class="btn btn-gold btn-small bt-addbot">+ Add Bot</button>`
-          : `<span class="bt-waiting">waiting for player…</span>`}</div>`
+          : isSpectator
+            ? `<button class="btn btn-green bt-joinseat">Join<br>for ${fmt(b.cost)}</button>`
+            : `<span class="bt-waiting">waiting for player…</span>`}</div>`
       : `<div class="bt-spin"><div class="bt-reel"></div><div class="bt-line"></div></div>
          <div class="bt-inv"></div>`;
     col.innerHTML = `
@@ -1014,6 +1071,14 @@ function buildBattleArena(b, playing) {
       ${body}`;
     const addBtn = col.querySelector('.bt-addbot');
     if (addBtn) addBtn.onclick = () => addBotToBattle(b.id);
+    const joinBtn = col.querySelector('.bt-joinseat');
+    if (joinBtn) joinBtn.onclick = async () => {
+      try {
+        const d = await api('battles/join', { id: b.id });
+        SND.pop();
+        renderRoom(d.battle);
+      } catch (e) { toast(e.message); }
+    };
     cols.appendChild(col);
     handles.colEls.push(col);
     handles.reels.push(col.querySelector('.bt-reel'));
@@ -1027,6 +1092,22 @@ function buildBattleArena(b, playing) {
   return handles;
 }
 
+// drives a tick callback off the reel's REAL animated position each frame (reading
+// the live transform matrix) instead of a guessed time schedule, so the sound/tick
+// can never drift out of sync with what's actually sliding past the needle line.
+function driveReelTicks(reel, pitch, axis, durationMs, tickFn) {
+  const start = performance.now();
+  let lastIdx = null;
+  function frame(now) {
+    const m = new DOMMatrixReadOnly(getComputedStyle(reel).transform);
+    const pos = axis === 'x' ? -m.m41 : -m.m42;
+    const idx = Math.round(pos / pitch);
+    if (idx !== lastIdx) { lastIdx = idx; tickFn(); }
+    if (now - start < durationMs) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
 // vertical spinner: fill a reel with weighted filler + the real drop, slide to it
 function btSpin(reel, pool, winItem, dur) {
   return new Promise((resolve) => {
@@ -1037,24 +1118,74 @@ function btSpin(reel, pool, winItem, dur) {
     for (let s = 0; s < SLOTS; s++) reel.appendChild(btSpinCell(s === WIN ? winItem : weightedPick(pool)));
     const winCell = reel.children[WIN];
     const viewport = reel.parentElement.clientHeight;
-    const jitter = (Math.random() - 0.5) * (winCell.offsetHeight * 0.4);
-    const target = winCell.offsetTop + winCell.offsetHeight / 2 - viewport / 2 + jitter;
+    // land dead-center under the needle line - no jitter, so the line always
+    // ends up exactly on the winning item
+    const target = winCell.offsetTop + winCell.offsetHeight / 2 - viewport / 2;
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      reel.style.transition = `transform ${dur}ms cubic-bezier(.08,.72,.12,1)`;
+      reel.style.transition = `transform ${dur}ms cubic-bezier(.45,.05,.15,1)`;
       reel.style.transform = `translateY(${-target}px)`;
     }));
-    // escalating ticks as it slows
-    let t = 0; for (let d = 60; t < dur - 200; d *= 1.08) { t += d; setTimeout(() => SND.tick(), t); }
-    setTimeout(resolve, dur);
+    const pitch = reel.children[1].offsetTop - reel.children[0].offsetTop;
+    driveReelTicks(reel, pitch, 'y', dur, () => SND.tick());
+    // once it settles dead-center, pop the winning item so it's unmistakable what you pulled
+    setTimeout(() => { winCell.classList.add('bt-win-pop'); resolve(); }, dur);
+  });
+}
+
+function jpCellEl(p, seat, pct) {
+  const d = document.createElement('div');
+  d.className = 'jp-cell';
+  d.innerHTML = `${playerAvatarHTML(p, seat)}<b>${p.name}</b><span class="jp-pct">${pct.toFixed(1)}%</span>`;
+  return d;
+}
+// weighted wheel of every player's head - the winner is already decided
+// server-side (winnerSeat); this just spins the real drop into view, same
+// "no jitter, dead-center landing" rules as the case reels.
+function jackpotSpin(players, totals, winnerSeat, dur) {
+  return new Promise((resolve) => {
+    const wrap = $('#jp-wrap'), reel = $('#jp-reel');
+    wrap.classList.remove('hidden');
+    reel.style.transition = 'none';
+    reel.style.transform = 'translateX(0)';
+    reel.innerHTML = '';
+    const pot = totals.reduce((s, t) => s + t, 0) || 1;
+    const weights = players.map((p, i) => Math.max(totals[i], pot * 0.001));
+    const totalW = weights.reduce((s, w) => s + w, 0);
+    const pick = () => {
+      let x = Math.random() * totalW;
+      for (let i = 0; i < players.length; i++) { x -= weights[i]; if (x <= 0) return i; }
+      return 0;
+    };
+    const SLOTS = 36, WIN_SLOT = 30, W = 128;
+    for (let s = 0; s < SLOTS; s++) {
+      const seat = s === WIN_SLOT ? winnerSeat : pick();
+      reel.appendChild(jpCellEl(players[seat], seat, totals[seat] / pot * 100));
+    }
+    const windowW = reel.parentElement.clientWidth;
+    const target = WIN_SLOT * W + W / 2 - windowW / 2;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      reel.style.transition = `transform ${dur}ms cubic-bezier(.45,.05,.15,1)`;
+      reel.style.transform = `translateX(${-target}px)`;
+    }));
+    driveReelTicks(reel, W, 'x', dur, () => SND.tick());
+    setTimeout(() => { reel.children[WIN_SLOT].classList.add('bt-win-pop'); resolve(); }, dur);
   });
 }
 
 async function animateBattle(b) {
   const r = b.result;
+  // if this client only found out the battle resolved a while after it actually
+  // did (slow poll tick, tab was backgrounded, etc), skip the fixed intro delay
+  // so it doesn't fall even further out of sync with everyone else watching
+  const skewMs = Date.now() - (r.resolvedAt || Date.now());
+  $('#room-msg').textContent = 'Grabbing EOS Block...';
+  $('#room-msg').className = 'stage-msg';
+  if (battleSpeed !== 'instant' && skewMs < 400) await sleep(550);
   const h = buildBattleArena(b, true);
   const roundsN = r.rounds.length;
   $('#room-msg').textContent = `Mode: ${r.mode}. Opening…`;
   $('#room-msg').className = 'stage-msg';
+  $('#jp-wrap').classList.add('hidden'); // reset from any previous jackpot reveal
 
   const scases = h.strip.querySelectorAll('.bt-scase');
   const spinDur = battleSpeed === 'instant' ? 0 : battleSpeed === 'quick' ? 1500 : 2700;
@@ -1093,11 +1224,21 @@ async function animateBattle(b) {
       countUp(h.vals[pi], running[pi], 450);
     });
     if (topTier >= 5) SND.impact(0.6); else SND.reveal(Math.min(topTier, 4));
-    await sleep(battleSpeed === 'instant' ? 80 : 380);
+    // brief pause on the landed item before the next case spins up - long enough to
+    // actually read what you pulled, short enough not to drag out a multi-round battle
+    await sleep(battleSpeed === 'instant' ? 150 : 800);
   }
 
   // winner columns are identified by SEAT (names aren't unique — all bots are "bots")
   const winnerSeats = r.winnerSeats || b.players.map((p, i) => (r.winners.includes(p.name) ? i : -1)).filter((i) => i >= 0);
+
+  // jackpot: the pot goes to one seat/team picked with odds proportional to what
+  // each side pulled - spin the wheel so that's visible before revealing the winner
+  if (r.mode === 'jackpot' && battleSpeed !== 'instant') {
+    $('#room-msg').textContent = 'Spinning the jackpot…';
+    await jackpotSpin(b.players, r.totals, winnerSeats[0], 4200);
+  }
+
   scases.forEach((e) => e.classList.remove('active'));
   b.players.forEach((p, i) => {
     h.vals[i].textContent = fmt(r.totals[i]);
@@ -1114,7 +1255,7 @@ async function animateBattle(b) {
     }
     if (won) h.colEls[i].classList.add('winner');
   });
-  const mySeat = me ? b.players.findIndex((p) => !p.bot && p.name === me.username) : -1;
+  const mySeat = b.youSeat ?? -1;
   const inIt = mySeat >= 0;
   const iWon = inIt && winnerSeats.includes(mySeat);
   if (inIt) { if (iWon) SND.win(); else SND.boom(); loadMe(); }
@@ -1160,7 +1301,7 @@ $('#daily-open').onclick = async () => {
     spinReel(dailyItems, d.itemIndex, '#daily-reel');
     setTimeout(() => {
       setBalance(d.balance);
-      SND.win();
+      if (onDailyPage()) SND.win();
       msg.textContent = `${d.item.name}! +${fmt(d.amount)} coins. See you tomorrow.`;
       msg.className = 'stage-msg good';
       dailySpinning = false; btn.disabled = false;
@@ -1622,173 +1763,6 @@ $('#bj-stand').onclick = async () => { try { renderBj(await api('blackjack/stand
 $('#bj-double').onclick = async () => { try { renderBj(await api('blackjack/double', {})); } catch (e) { toast(e.message); } };
 
 // ================= FAIRNESS =================
-let _botNames = null;
-async function renderDeposit() {
-  if (!_botNames) {
-    try { const d = await api('mc/bots'); _botNames = d.bots; } catch { _botNames = ['AALV1N']; }
-  }
-  const linked = me && me.mcUsername;
-  $('#deposit-unlinked').classList.toggle('hidden', !!linked);
-  $('#deposit-linked').classList.toggle('hidden', !linked);
-  if (linked) {
-    $('#deposit-mc-name').textContent = me.mcUsername;
-    $('#deposit-bot-name').textContent = _botNames[0];
-    $('#deposit-cmd').textContent = `/pay ${_botNames[0]} <amount>`;
-  }
-}
-$('#deposit-link-btn').onclick = openMcModal;
-
-// ================= REWARDS (rakeback + level) =================
-async function renderRewards() {
-  if (!me) return;
-  let data;
-  try { data = await api('rewards'); } catch (e) { return toast(e.message); }
-
-  const grid = $('#rb-grid');
-  grid.innerHTML = '';
-  {
-    const kind = 'instant';
-    const info = data.rakeback[kind];
-    const card = document.createElement('div');
-    card.className = 'rb-card';
-    card.innerHTML = `
-      <strong>Instant</strong>
-      <span class="rb-amt">${fmt(info.amount)}</span>
-      <button class="btn btn-green btn-small" ${info.amount > 0 ? '' : 'disabled'}>Claim</button>
-    `;
-    card.querySelector('button').onclick = async () => {
-      try {
-        const r = await api('rewards/rakeback', { kind });
-        setBalance(r.balance);
-        toast(`Claimed ${fmt(r.amount)} rakeback!`, true);
-        renderRewards();
-      } catch (e) { toast(e.message); }
-    };
-    grid.appendChild(card);
-  }
-
-  const lv = data.level;
-  $('#rw-level').textContent = lv.level;
-  $('#rw-bar').style.width = lv.progressPct + '%';
-  $('#rw-progress').textContent = `${fmt(lv.wageredCoins)} / ${fmt(lv.nextCeil)} wagered toward level ${lv.level + 1}`;
-
-  const ms = $('#rw-milestones');
-  ms.innerHTML = '';
-  const claimable = lv.milestones.filter(m => m.unlocked && !m.claimed);
-  lv.milestones.forEach(m => {
-    const el = document.createElement('div');
-    el.className = 'rb-milestone' + (m.claimed ? ' claimed' : m.unlocked ? ' unlocked' : '');
-    el.innerHTML = `<span>Lvl ${m.level}</span><span>${fmt(m.reward)}</span>`;
-    ms.appendChild(el);
-  });
-  const claimBtn = $('#rw-claim-btn');
-  if (claimBtn) claimBtn.remove();
-  if (claimable.length) {
-    const btn = document.createElement('button');
-    btn.id = 'rw-claim-btn';
-    btn.className = 'btn btn-green';
-    btn.style.marginTop = '12px';
-    btn.textContent = `Claim ${claimable.length} level reward${claimable.length > 1 ? 's' : ''}`;
-    btn.onclick = async () => {
-      try {
-        const r = await api('rewards/level');
-        setBalance(r.balance);
-        toast(`Claimed ${fmt(r.amount)} from levels ${r.levels.join(', ')}!`, true);
-        renderRewards();
-      } catch (e) { toast(e.message); }
-    };
-    ms.after(btn);
-  }
-}
-
-// ================= PROFILE =================
-async function renderProfile() {
-  if (!me) return;
-  let d;
-  try { d = await api('profile'); } catch (e) { return toast(e.message); }
-
-  $('#pf-avatar').src = d.mcUsername
-    ? `https://crafatar.com/avatars/${encodeURIComponent(d.mcUsername)}?overlay`
-    : '/img/donut.svg';
-  $('#pf-avatar').alt = `${d.mcUsername || d.username} avatar`;
-  $('#pf-name').textContent = d.mcUsername || d.username;
-  $('#pf-level').textContent = d.level;
-  $('#pf-xp-cur').textContent = fmt(d.wageredCoins);
-  $('#pf-xp-next').textContent = fmt(d.nextCeil);
-  $('#pf-anon-check').checked = !!me.anonymous;
-  const pct = d.nextCeil > d.curFloor ? ((d.wageredCoins - d.curFloor) / (d.nextCeil - d.curFloor)) * 100 : 100;
-  $('#pf-xp-bar').style.width = Math.max(0, Math.min(100, pct)) + '%';
-
-  $('#pf-deposited').textContent = fmt(d.totalDeposited);
-  $('#pf-withdrawn').textContent = fmt(d.totalWithdrawn);
-  $('#pf-wagered').textContent = fmt(d.totalWagered);
-  const profitEl = $('#pf-profit');
-  profitEl.textContent = (d.profit >= 0 ? '+' : '') + fmt(d.profit);
-  profitEl.classList.toggle('pf-neg', d.profit < 0);
-  profitEl.classList.toggle('pf-pos', d.profit >= 0);
-
-  const body = $('#pf-tx-body');
-  body.innerHTML = '';
-  d.transactions.forEach(t => {
-    const tr = document.createElement('tr');
-    const when = new Date(t.created_at).toLocaleString();
-    const sign = t.amount >= 0 ? '+' : '';
-    tr.innerHTML = `<td>${when}</td><td>${t.method}</td><td>${t.type}</td><td class="${t.amount >= 0 ? 'pf-pos' : 'pf-neg'}">${sign}${fmt(t.amount)}</td>`;
-    body.appendChild(tr);
-  });
-}
-$('#pf-anon-check').onchange = async (e) => {
-  try {
-    const r = await api('anonymous', { enabled: e.target.checked });
-    me.anonymous = r.anonymous;
-    $('#username-text').textContent = me.anonymous ? 'Anonymous' : me.username;
-    toast(r.anonymous ? 'Anonymous mode on — your name is hidden in chat and feeds.' : 'Anonymous mode off.');
-  } catch (err) { e.target.checked = !e.target.checked; toast(err.message); }
-};
-
-// ================= LEADERBOARD =================
-// fixed prizes for the top 3 wagerers - cosmetic label only, no auto-payout
-const LB_PRIZE = { 1: 500_000_000, 2: 200_000_000, 3: 100_000_000 };
-function lbAvatar(name) {
-  return name
-    ? `<img src="https://crafatar.com/avatars/${encodeURIComponent(name)}?overlay" alt="${name} avatar">`
-    : `<img src="/img/donut.svg" alt="Anonymous avatar">`;
-}
-function lbPodiumCard(u, rank) {
-  const place = rank === 1 ? '1st' : rank === 2 ? '2nd' : '3rd';
-  return `<div class="lb-card lb-p${rank}">
-    <span class="lb-place">${place} place</span>
-    <div class="lb-pfp">${lbAvatar(u.avatarName)}</div>
-    <b class="lb-name">${u.username}</b>
-    <div class="lb-wagered"><span>Total wagered</span><b>${fmt(u.wagered)}</b></div>
-    <div class="lb-prize">Prize: ${fmt(LB_PRIZE[rank])}</div>
-  </div>`;
-}
-function lbRow(u, rank) {
-  return `<li class="lb-row">
-    <span class="lb-rank">${rank}</span>
-    <div class="lb-row-pfp">${lbAvatar(u.avatarName)}</div>
-    <span class="lb-row-name">${u.username}</span>
-    <span class="lb-row-wagered">${fmt(u.wagered)}</span>
-  </li>`;
-}
-async function renderLeaderboard() {
-  const podium = $('#lb-podium'), list = $('#lb-list');
-  if (!podium || !list) return;
-  try {
-    const { top } = await api('leaderboard/full');
-    if (!top.length) {
-      podium.innerHTML = '';
-      list.innerHTML = '<li class="lb-empty">Nobody has wagered yet — be the first degenerate.</li>';
-      return;
-    }
-    const [p1, p2, p3] = [top[0], top[1], top[2]];
-    podium.innerHTML = [p2 && lbPodiumCard(p2, 2), p1 && lbPodiumCard(p1, 1), p3 && lbPodiumCard(p3, 3)]
-      .filter(Boolean).join('');
-    list.innerHTML = top.slice(3).map((u, i) => lbRow(u, i + 4)).join('');
-  } catch {}
-}
-
 async function renderFair() {
   const has = !!me;
   $('#fair-user').classList.toggle('hidden', !has);
@@ -1816,11 +1790,26 @@ let chatLastId = 0;
 function chatAdd(m) {
   const body = $('#chat-body');
   const el = document.createElement('div');
-  el.className = 'chat-msg' + (me && m.username === me.username ? ' mine' : '');
+  el.className = 'chat-msg' + (m.mine ? ' mine' : '');
+  const pfp = document.createElement('img');
+  pfp.className = 'chat-pfp'; pfp.alt = ''; pfp.loading = 'lazy';
+  pfp.src = `https://minotar.net/helm/${m.username === HIDDEN_NAME ? 'MHF_Question' : m.username}/24.png`;
+  el.appendChild(pfp);
+  const card = document.createElement('div');
+  card.className = 'chat-card';
+  const nameLine = document.createElement('div');
+  nameLine.className = 'chat-name-line';
   const who = document.createElement('span');
   who.className = 'who'; who.textContent = m.username;
-  el.appendChild(who);
-  el.appendChild(document.createTextNode(m.message)); // textContent path = no HTML injection
+  nameLine.appendChild(who);
+  if (typeof m.level === 'number') {
+    const lvl = document.createElement('span');
+    lvl.className = 'chat-level'; lvl.textContent = `Lvl ${m.level}`;
+    nameLine.appendChild(lvl);
+  }
+  card.appendChild(nameLine);
+  card.appendChild(document.createTextNode(m.message)); // textContent path = no HTML injection
+  el.appendChild(card);
   body.appendChild(el);
 }
 async function refreshChat() {
@@ -1856,19 +1845,49 @@ $('#chat-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') sen
 setInterval(refreshChat, 3000);
 
 // ================= FEED + LEADERBOARD =================
-let lastFeedKey = '';
+const GAME_ICON = {
+  cases: 'barrel', battle: 'barrel', mines: 'tnt', towers: 'ladder', coinflip: 'gold_nugget',
+  blackjack: 'filled_map', dice: 'rabbit_foot', chicken: 'chicken',
+};
+const GAME_LABEL = {
+  cases: 'Cases', battle: 'Case Battle', mines: 'Mines', towers: 'Towers', coinflip: 'Coinflip',
+  blackjack: 'Blackjack', dice: 'Dice', chicken: 'Chicken',
+};
+let lastFeedKey = '', lastFeedBets = [], feedFilter = 'all';
+function feedRow(b, isNew) {
+  const won = b.payout > 0;
+  const mult = b.multiplier || 0;
+  return `<tr class="${isNew ? 'new-row' : ''}">
+    <td><span class="feed-game"><img src="/img/items/${GAME_ICON[b.game] || 'barrel'}.png" alt="${GAME_LABEL[b.game] || b.game}">${GAME_LABEL[b.game] || b.game}</span></td>
+    <td><span class="feed-user"><img class="feed-avatar" src="https://minotar.net/helm/${b.username}/32.png" alt="${b.username} avatar" loading="lazy">${b.username}</span></td>
+    <td><span class="feed-amt coin">${fmt(b.amount)}</span></td>
+    <td><span class="feed-mult">${mult ? 'x' + mult.toFixed(2) : 'x0.00'}</span></td>
+    <td><span class="feed-payout ${won ? 'good' : 'bad'} coin">${won ? '+' + fmt(b.payout) : '0'}</span></td>
+    <td><span class="feed-time">${new Date(b.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</span></td>
+  </tr>`;
+}
+function renderFeed() {
+  const tbody = $('#feed-table tbody');
+  if (!tbody) return;
+  let bets = lastFeedBets;
+  if (feedFilter === 'high') bets = bets.filter((b) => b.payout > 0).slice().sort((a, b) => b.payout - a.payout);
+  else if (feedFilter === 'lucky') bets = bets.filter((b) => (b.multiplier || 0) >= 3).slice().sort((a, b) => b.multiplier - a.multiplier);
+  tbody.innerHTML = bets.map((b, i) => feedRow(b, feedFilter === 'all' && i === 0 && lastFeedIsNew)).join('');
+}
+let lastFeedIsNew = false;
+$$('#feed-tabs .feed-tab').forEach((btn) => btn.onclick = () => {
+  feedFilter = btn.dataset.filter;
+  $$('#feed-tabs .feed-tab').forEach((b) => b.classList.toggle('active', b === btn));
+  renderFeed();
+});
 async function refreshFeed() {
   try {
     const { bets } = await api('feed');
-    const tbody = $('#feed-table tbody');
     const key = JSON.stringify(bets[0] || {});
-    const isNew = key !== lastFeedKey && lastFeedKey !== '';
+    lastFeedIsNew = key !== lastFeedKey && lastFeedKey !== '';
     lastFeedKey = key;
-    tbody.innerHTML = bets.map((b, i) => `<tr class="${i === 0 && isNew ? 'new-row' : ''}">
-      <td>${b.username}</td><td>${b.game}</td><td>${fmt(b.amount)}</td>
-      <td>${b.multiplier ? b.multiplier.toFixed(2) + '×' : '—'}</td>
-      <td class="${b.payout > 0 ? 'win' : 'loss'}">${b.payout > 0 ? '+' + fmt(b.payout) : '-' + fmt(b.amount)}</td>
-    </tr>`).join('');
+    lastFeedBets = bets;
+    renderFeed();
   } catch { /* server asleep, whatever */ }
 }
 async function refreshBoard() {
@@ -1880,6 +1899,192 @@ async function refreshBoard() {
 }
 setInterval(refreshFeed, 5000);
 setInterval(refreshBoard, 30000);
+
+// ---- dedicated leaderboard page: top-3 podium + ranks 4-20 ----
+// fixed prizes for the top 3 wagerers - nobody else on the board gets a reward
+const LB_PRIZE = { 1: 500_000_000, 2: 200_000_000, 3: 100_000_000 };
+function lbAvatar(name) {
+  // anonymous players have no avatarName from the server - show a neutral icon instead
+  return name
+    ? `<img src="https://minotar.net/helm/${encodeURIComponent(name)}/64.png" alt="${name} avatar" loading="lazy">`
+    : `<img src="/img/donut.svg" alt="Anonymous player" loading="lazy">`;
+}
+function lbPodiumCard(u, rank) {
+  const place = rank === 1 ? '1st' : rank === 2 ? '2nd' : '3rd';
+  return `<div class="lb-card lb-p${rank}">
+    <span class="lb-place">${place} place</span>
+    <div class="lb-pfp">${lbAvatar(u.avatarName)}</div>
+    <b class="lb-name">${u.username}</b>
+    <div class="lb-wagered"><span>Total wagered</span><b>${fmt(u.wagered)}</b></div>
+    <div class="lb-prize">Prize: ${fmt(LB_PRIZE[rank])}</div>
+  </div>`;
+}
+function lbRow(u, rank) {
+  return `<li class="lb-row">
+    <span class="lb-rank">${rank}</span>
+    <div class="lb-row-pfp">${lbAvatar(u.avatarName)}</div>
+    <span class="lb-row-name">${u.username}</span>
+    <span class="lb-row-wagered">${fmt(u.wagered)}</span>
+  </li>`;
+}
+async function renderLeaderboard() {
+  const podium = $('#lb-podium'), list = $('#lb-list');
+  if (!podium || !list) return;
+  try {
+    const { top } = await api('leaderboard/full');
+    if (!top.length) {
+      podium.innerHTML = '';
+      list.innerHTML = '<li class="lb-empty">Nobody has wagered yet — be the first degenerate.</li>';
+      return;
+    }
+    // podium order: 2nd, 1st, 3rd (matches the classic centered-1st layout)
+    const [p1, p2, p3] = [top[0], top[1], top[2]];
+    podium.innerHTML = [p2 && lbPodiumCard(p2, 2), p1 && lbPodiumCard(p1, 1), p3 && lbPodiumCard(p3, 3)]
+      .filter(Boolean).join('');
+    list.innerHTML = top.slice(3).map((u, i) => lbRow(u, i + 4)).join('');
+  } catch {}
+}
+
+// ================= REWARDS (rakeback + level milestones) =================
+const RB_LABEL = { instant: 'Instant Rakeback', daily: 'Daily Rakeback', weekly: 'Weekly Rakeback', monthly: 'Monthly Rakeback' };
+function countdown(ms) {
+  if (ms <= 0) return '';
+  const d = Math.floor(ms / 86400000), h = Math.floor((ms % 86400000) / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000), s = Math.floor((ms % 60000) / 1000);
+  return d > 0 ? `${d}d ${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    : `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+function rbCard(kind, info) {
+  const ready = info.ready && info.amount > 0;
+  const timeLeft = info.readyAt ? info.readyAt - Date.now() : 0;
+  const btnLabel = !info.ready ? countdown(timeLeft) : 'Claim';
+  return `<div class="rw-rb-card">
+    <span class="rw-rb-title">${RB_LABEL[kind]}</span>
+    <span class="rw-rb-amt"><img src="/img/donut.svg" alt="Donuts">${fmt(info.amount)}</span>
+    <button class="rw-rb-btn" data-rbkind="${kind}" ${ready ? '' : 'disabled'}>${btnLabel}</button>
+  </div>`;
+}
+function milestoneRow(m) {
+  const cls = 'rw-milestone' + (m.unlocked ? ' unlocked' : '') + (m.claimed ? ' claimed' : '');
+  const claimBtn = m.unlocked && !m.claimed ? `<button class="rw-milestone-claim" data-mlevel="${m.level}">Claim</button>` : '';
+  return `<div class="${cls}">
+    <span class="rw-milestone-level">Level ${m.level}</span>
+    <div class="rw-milestone-right">
+      <span class="rw-milestone-amt"><img src="/img/donut.svg" alt="Donuts">${fmt(m.reward)}</span>
+      ${claimBtn}
+    </div>
+  </div>`;
+}
+async function renderRewards() {
+  const page = $('[data-page="rewards"]');
+  if (!page || page.classList.contains('hidden')) return;
+  $('#rewards-signin').classList.toggle('hidden', !!me);
+  $('.rw-tabs').classList.toggle('hidden', !me);
+  if (!me) { $('#rw-panel-rakeback').classList.add('hidden'); $('#rw-panel-levels').classList.add('hidden'); return; }
+  const activeTab = $('.rw-tab.active')?.dataset.rwtab || 'rakeback';
+  $('#rw-panel-rakeback').classList.toggle('hidden', activeTab !== 'rakeback');
+  $('#rw-panel-levels').classList.toggle('hidden', activeTab !== 'levels');
+  try {
+    const d = await api('rewards');
+    const grid = $('#rw-rb-grid');
+    if (grid) grid.innerHTML = ['instant'].map((k) => rbCard(k, d.rakeback[k])).join('');
+    grid.querySelectorAll('[data-rbkind]').forEach((btn) => btn.onclick = async () => {
+      try {
+        const r = await api('rewards/rakeback', { kind: btn.dataset.rbkind });
+        setBalance(r.balance); SND.coin(); toast(`Claimed +${fmt(r.amount)} coins`, true);
+        renderRewards();
+      } catch (e) { toast(e.message); }
+    });
+
+    const lv = d.level;
+    $('#rw-level-num').textContent = lv.level;
+    $('#rw-level-pill').textContent = `Level ${lv.level}${lv.maxed ? ' (MAX)' : ''}`;
+    $('#rw-level-fill').style.width = lv.progressPct + '%';
+    $('#rw-level-cur').textContent = `Level ${lv.level}`;
+    $('#rw-level-pct').textContent = lv.maxed ? 'Max level' : `${fmt(lv.remainingCoins)} to go`;
+    $('#rw-level-next').textContent = lv.maxed ? `Level ${lv.maxLevel}` : `Level ${lv.level + 1}`;
+    const ms = $('#rw-milestones');
+    ms.innerHTML = lv.milestones.map(milestoneRow).join('');
+    ms.querySelectorAll('[data-mlevel]').forEach((btn) => btn.onclick = async () => {
+      try {
+        const r = await api('rewards/level', {});
+        setBalance(r.balance); SND.coin(); toast(`Claimed +${fmt(r.amount)} coins`, true);
+        renderRewards();
+      } catch (e) { toast(e.message); }
+    });
+  } catch {}
+}
+$$('.rw-tab').forEach((tab) => tab.onclick = () => {
+  $$('.rw-tab').forEach((t) => t.classList.toggle('active', t === tab));
+  $('#rw-panel-rakeback').classList.toggle('hidden', tab.dataset.rwtab !== 'rakeback');
+  $('#rw-panel-levels').classList.toggle('hidden', tab.dataset.rwtab !== 'levels');
+});
+setInterval(renderRewards, 5000);
+
+// ================= STATS =================
+function statsBetRow(b) {
+  const time = new Date(b.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return `<tr>
+    <td>${GAME_LABEL[b.game] || b.game}</td>
+    <td><span class="coin">${fmt(b.amount)}</span></td>
+    <td>${b.multiplier ? 'x' + b.multiplier.toFixed(2) : '—'}</td>
+    <td class="${b.payout > 0 ? 'win' : 'loss'}">${b.payout > 0 ? '+' + fmt(b.payout) : '0'}</td>
+    <td>${time}</td>
+  </tr>`;
+}
+async function renderStats() {
+  const page = $('[data-page="stats"]');
+  if (!page || page.classList.contains('hidden') || !me) return;
+  const cards = $('#stats-cards');
+  const profile = await api('profile').catch(() => null);
+  cards.innerHTML = `
+    <div class="stat-card"><span>Balance</span><b class="coin">${fmt(me.balance)}</b></div>
+    <div class="stat-card"><span>Total wagered</span><b class="coin">${profile ? fmt(profile.totalWagered) : fmt(me.totalWagered)}</b></div>
+    <div class="stat-card"><span>Level</span><b>${profile ? profile.level : '—'}</b></div>
+    <div class="stat-card"><span>Total deposited</span><b class="coin">${profile ? fmt(profile.totalDeposited) : '—'}</b></div>
+    <div class="stat-card"><span>Total withdrawn</span><b class="coin">${profile ? fmt(profile.totalWithdrawn) : '—'}</b></div>
+    <div class="stat-card"><span>Total profit</span><b class="${profile && profile.profit >= 0 ? 'win' : 'loss'}">${profile ? (profile.profit >= 0 ? '+' : '') + fmt(profile.profit) : '—'}</b></div>
+  `;
+  try {
+    const { bets } = await api('history');
+    $('#stats-table tbody').innerHTML = bets.length
+      ? bets.map(statsBetRow).join('')
+      : '<tr><td colspan="5" class="stage-msg">No bets yet — go make some questionable decisions.</td></tr>';
+  } catch {}
+  const txBody = $('#stats-tx-table tbody');
+  if (txBody && profile) {
+    txBody.innerHTML = profile.transactions.length
+      ? profile.transactions.map(t => {
+          const when = new Date(t.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+          const sign = t.amount >= 0 ? '+' : '';
+          return `<tr><td>${when}</td><td>${t.method}</td><td>${t.type}</td><td class="${t.amount >= 0 ? 'win' : 'loss'}">${sign}${fmt(t.amount)}</td></tr>`;
+        }).join('')
+      : '<tr><td colspan="4" class="stage-msg">No deposits or withdrawals yet.</td></tr>';
+  }
+}
+
+// ================= SETTINGS =================
+function renderSettings() {
+  const page = $('[data-page="settings"]');
+  if (!page || page.classList.contains('hidden') || !me) return;
+  const anonBtn = $('#settings-anon-toggle');
+  anonBtn.textContent = me.anonymous ? 'On' : 'Off';
+  anonBtn.classList.toggle('active', !!me.anonymous);
+  const soundBtn = $('#settings-sound-toggle');
+  soundBtn.textContent = SND.muted ? 'Off' : 'On';
+  soundBtn.classList.toggle('active', !SND.muted);
+  $('#settings-account-info').textContent = `${me.mcUsername || me.username} · ${fmt(me.totalWagered)} wagered total`;
+}
+$('#settings-anon-toggle').onclick = async () => {
+  if (!me) return;
+  try {
+    const r = await api('anonymous', { enabled: !me.anonymous });
+    me.anonymous = r.anonymous;
+    toast(r.anonymous ? 'You are now anonymous' : 'Anonymous mode off', true);
+    renderSettings();
+  } catch (e) { toast(e.message); }
+};
+$('#settings-sound-toggle').onclick = () => { SND.toggle(); renderSettings(); };
 
 // ================= boot =================
 (async () => {
@@ -1894,6 +2099,9 @@ setInterval(refreshBoard, 30000);
   buildMinesGrid();
   buildTower();
   buildRoad(0);
+  // Cases always starts on the battles lobby - never resumes single-case or a
+  // watched battle room from a previous visit/reload.
+  showCasesView('battles');
   route();
   refreshFeed(); refreshBoard(); loadCases(); loadDaily(); refreshChat();
   try {

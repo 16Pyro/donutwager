@@ -40,11 +40,12 @@ app.use(session({
   store: new SqliteStore(),
   resave: false,
   saveUninitialized: false,
+  rolling: true, // every request pushes the expiry back out - active users never expire
   cookie: {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
-    maxAge: 7 * 24 * 60 * 60 * 1000,
+    maxAge: 365 * 24 * 60 * 60 * 1000, // effectively "until you log out"
   },
 }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
@@ -248,9 +249,9 @@ function battleRoute(fn) {
   };
 }
 
-app.get('/api/battles', battleRoute(() => ({ battles: battles.list() })));
-app.get('/api/battles/history', battleRoute(() => ({ battles: battles.history() })));
-app.get('/api/battles/:id', battleRoute((req) => ({ battle: battles.get(Number(req.params.id)) })));
+app.get('/api/battles', battleRoute((req) => ({ battles: battles.list(req.session.userId) })));
+app.get('/api/battles/history', battleRoute((req) => ({ battles: battles.history(req.session.userId) })));
+app.get('/api/battles/:id', battleRoute((req) => ({ battle: battles.get(Number(req.params.id), req.session.userId) })));
 app.post('/api/battles/create', ensureUser, throttle, battleRoute((req) => battles.create(req.session.userId, req.body || {})));
 app.post('/api/battles/join', ensureUser, throttle, battleRoute((req) => ({ battle: battles.join(req.session.userId, Number((req.body || {}).id)) })));
 app.post('/api/battles/bots', ensureUser, throttle, battleRoute((req) => ({ battle: battles.callBots(req.session.userId, Number((req.body || {}).id)) })));
@@ -290,7 +291,11 @@ app.post('/api/daily/open', ensureUser, throttle, (req, res) => {
 const lastChat = new Map();
 app.get('/api/chat', (req, res) => {
   const after = Number(req.query.after) || 0;
-  res.json({ messages: stmts.recentChat.all(after).reverse() });
+  const messages = stmts.recentChat.all(after).reverse().map((m) => ({
+    id: m.id, message: m.message, created_at: m.created_at, username: m.username,
+    level: rewards.levelForWagered(m.total_wagered / 100),
+  }));
+  res.json({ messages });
 });
 app.post('/api/chat', ensureUser, (req, res) => {
   const now = Date.now();

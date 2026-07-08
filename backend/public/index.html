@@ -3,18 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DonutWager — #1 DonutSMP Minecraft Casino</title>
-<meta name="description" content="DonutWager is the official DonutSMP community casino. Open cases, battle friends, play mines, towers, blackjack, coinflip and dice. Provably fair. No signup needed.">
-<meta name="keywords" content="DonutSMP, Minecraft casino, DonutWager, minecraft gambling, minecraft cases, provably fair, donutsmp.net">
+<title>DonutWager | The #1 Donut SMP Gambling & Casino Platform</title>
+<meta name="description" content="Join DonutWager for the best Donut SMP gambling experience. Open cases, play casino games, and track friendly Minecraft bets. Provably fair Donut SMP betting!">
+<meta name="keywords" content="Donut SMP gambling, Donut SMP casino, DonutWager, Minecraft SMP betting, minecraft gambling, provably fair casino, donutsmp.net">
 <meta name="robots" content="index, follow">
-<link rel="canonical" href="https://www.donutwager.org">
-<meta property="og:title" content="DonutWager — #1 DonutSMP Minecraft Casino">
-<meta property="og:description" content="Open cases, battle friends, play mines, towers, blackjack and more. Deposit with in-game Donuts. Provably fair.">
-<meta property="og:url" content="https://www.donutwager.org">
+<link rel="canonical" href="https://www.donutwager.org/">
+<meta property="og:title" content="DonutWager | The #1 Donut SMP Gambling & Casino Platform">
+<meta property="og:description" content="Join DonutWager for the best Donut SMP gambling experience. Open cases, play casino games, and track friendly Minecraft bets.">
+<meta property="og:url" content="https://www.donutwager.org/">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="DonutWager — DonutSMP Casino">
-<meta name="twitter:description" content="The DonutSMP community casino. Cases, battles, mines, blackjack and more.">
+<meta name="twitter:title" content="DonutWager | Donut SMP Gambling">
+<meta name="twitter:description" content="The best Donut SMP gambling and betting platform. Cases, mines, blackjack, and more.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
@@ -26,7 +26,7 @@
   "@type": "WebSite",
   "name": "DonutWager",
   "alternateName": "Donut Wager",
-  "url": "https://www.donutwager.org",
+  "url": "https://www.donutwager.org/",
   "description": "DonutWager is a provably fair casino built for the DonutSMP Minecraft community. Pay any DonutWager bot in-game on donutsmp.net and your Minecraft username becomes your account automatically — no registration or password required.",
   "publisher": {
     "@type": "Organization",
@@ -40,7 +40,7 @@
 <!-- ======== SIDEBAR ======== -->
 <aside class="sidebar">
   <a class="brand" href="#/" aria-label="DonutWager home">
-    <img src="/img/donut.svg" alt="DonutWager logo" class="brand-donut">
+    <img src="/img/donut.svg" alt="DonutWager - Donut SMP Gambling Casino Logo" class="brand-donut">
     <span class="brand-name">DONUT<em>WAGER</em></span>
   </a>
 
@@ -58,11 +58,9 @@
 
   <p class="side-label">Other</p>
   <nav class="sidenav">
-    <a href="#/daily" data-nav="daily"><img class="nav-ico" src="/img/items/golden_apple.png" alt="Daily Case">Daily Case</a>
-    <a href="#/deposit" data-nav="deposit"><img class="nav-ico" src="/img/items/emerald.png" alt="Deposit">Deposit</a>
-    <a href="#/rewards" data-nav="rewards"><img class="nav-ico" src="/img/items/nether_star.png" alt="Rewards">Rewards</a>
-    <a href="#/profile" data-nav="profile"><img class="nav-ico" src="/img/items/name_tag.png" alt="Profile">Profile</a>
+    <a href="#/rewards" data-nav="rewards"><img class="nav-ico" src="/img/items/totem.png" alt="Rewards">Rewards</a>
     <a href="#/leaderboard" data-nav="leaderboard"><img class="nav-ico" src="/img/items/diamond.png" alt="Leaderboard">Leaderboard</a>
+    <a href="#/daily" data-nav="daily"><img class="nav-ico" src="/img/items/golden_apple.png" alt="Daily Case">Daily Case</a>
     <a href="#/fair" data-nav="fair"><img class="nav-ico" src="/img/items/writable_book.png" alt="Fairness">Fairness</a>
   </nav>
 
@@ -77,18 +75,28 @@
     <button class="btn btn-ghost btn-small burger" id="burger">☰</button>
     <div class="topbar-spacer"></div>
     <a class="btn btn-ghost btn-small" href="https://discord.gg/rgZEmjjCc" target="_blank" rel="noopener">Discord</a>
-    <div class="wallet hidden" id="wallet">
-      <span class="wallet-coin"></span>
-      <span id="balance">0.00</span>
+    <div class="wallet-wrap hidden" id="wallet">
+      <button class="btn btn-ghost btn-small" id="wallet-withdraw-btn">Withdraw</button>
+      <span class="wallet-balance">
+        <span class="wallet-coin"></span>
+        <span id="balance">0.00</span>
+      </span>
+      <button class="btn btn-green btn-small" id="wallet-deposit-btn">Deposit</button>
     </div>
-    <button class="btn btn-ghost btn-small" id="sound-toggle" title="Toggle sounds">🔊</button>
-    <button class="btn btn-ghost btn-small" id="chat-toggle" title="Toggle chat">💬</button>
-    <button class="btn btn-green" id="mc-link-btn">⛏ Link MC Account</button>
-    <div id="user-menu" class="hidden">
-      <a class="btn btn-ghost btn-small" id="username-label" href="#/profile">👤 <span id="username-text"></span></a>
-      <button class="btn btn-ghost btn-small" id="deposit-btn">⬆ Deposit</button>
-      <button class="btn btn-ghost btn-small" id="withdraw-btn">⬇ Withdraw</button>
-      <button class="btn btn-ghost btn-small" id="logout-btn">Log out</button>
+    <button class="btn btn-gold btn-small hidden" id="rewards-btn">Rewards</button>
+    <div id="auth-buttons">
+      <button class="btn btn-green" data-modal="link">⛏ Link Minecraft</button>
+    </div>
+    <div id="user-menu" class="hidden profile-wrap">
+      <button class="profile-btn" id="profile-btn">
+        <img id="profile-avatar" src="" alt="">
+      </button>
+      <div class="profile-dropdown hidden" id="profile-dropdown">
+        <div class="profile-dropdown-name" id="username-label"></div>
+        <button class="profile-dropdown-item" id="dd-rewards-btn">Rewards</button>
+        <button class="profile-dropdown-item" id="dd-stats-btn">Stats</button>
+        <button class="profile-dropdown-item" id="dd-settings-btn">Settings</button>
+      </div>
     </div>
   </header>
 
@@ -98,9 +106,9 @@
   <section class="page" data-page="home">
     <div class="hero">
       <div class="hero-copy">
-        <p class="hero-kicker">the donutsmp casino</p>
-        <h1>Bet your blocks.</h1>
-        <p class="hero-sub">Seven games, zero trust required — every roll is provably fair
+        <p class="hero-kicker">the #1 donutsmp casino</p>
+        <h1>Donut SMP Gambling & Casino</h1>
+        <p class="hero-sub">The premier Donut SMP betting platform. Seven games, zero trust required — every roll is provably fair
           and settled on our servers. No signup needed: pay the bot in-game and start mining.</p>
         <div class="hero-actions">
           <a class="btn btn-green btn-big" href="#/cases">Open a case</a>
@@ -108,7 +116,7 @@
         </div>
       </div>
       <div class="hero-donut">
-        <img src="/img/donut.svg" alt="pixel donut" class="floaty">
+        <img src="/img/donut.svg" alt="Donut SMP gambling platform token" class="floaty">
         <div class="sprinkle s1"></div><div class="sprinkle s2"></div>
         <div class="sprinkle s3"></div><div class="sprinkle s4"></div>
       </div>
@@ -147,10 +155,15 @@
     </div>
 
     <div class="home-cols">
-      <div class="panel">
-        <h3 class="panel-title"><span class="live-dot"></span> Live bets</h3>
+      <div class="panel feed-panel">
+        <h3 class="panel-title"><span class="live-dot"></span> Live feed</h3>
+        <div class="feed-tabs" id="feed-tabs">
+          <button class="feed-tab active" data-filter="all">All Games</button>
+          <button class="feed-tab" data-filter="high">High wins</button>
+          <button class="feed-tab" data-filter="lucky">Lucky wins</button>
+        </div>
         <table class="feed-table" id="feed-table">
-          <thead><tr><th>player</th><th>game</th><th>bet</th><th>mult</th><th>payout</th></tr></thead>
+          <thead><tr><th>Game</th><th>Username</th><th>Amount</th><th>Multiplier</th><th>Payout</th><th>Time</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -180,7 +193,7 @@
       <button class="cases-tab active" id="tab-battles">Case battles</button>
       <button class="cases-tab" id="tab-single">Open single case</button>
       <span class="cases-topbar-spacer"></span>
-      <button class="btn btn-green" id="battle-create-btn">Create case battle</button>
+      <button class="btn btn-green" id="battle-create-btn">Create case battle<span class="btn-cost hidden" id="battle-create-btn-cost"></span></button>
     </div>
 
     <!-- battle lobby -->
@@ -235,9 +248,13 @@
         <h2 class="section-title" id="room-title">Battle</h2>
         <span class="room-mode" id="room-mode"></span>
       </div>
+      <div class="jp-wrap hidden" id="jp-wrap">
+        <p class="jp-label">JACKPOT — spinning for the pot…</p>
+        <div class="jp-window"><div class="jp-reel" id="jp-reel"></div><div class="jp-needle"></div></div>
+      </div>
       <div class="battle-board" id="room-board"></div>
       <div class="room-actions">
-        <button class="btn btn-gold hidden" id="room-bots">Start with bots</button>
+        <button class="btn btn-green btn-big hidden" id="room-bots">Call Bots</button>
       </div>
       <p class="stage-msg" id="room-msg"></p>
     </div>
@@ -335,6 +352,93 @@
         <p class="stage-msg" id="daily-msg">Come back every day. The star is real, someone will hit it.</p>
       </div>
     </div>
+  </section>
+
+  <!-- ======== REWARDS ======== -->
+  <section class="page hidden" data-page="rewards">
+    <div class="rw-scope">
+      <h2 class="rw-title">Rewards</h2>
+      <p id="rewards-signin" class="hint">Pay a DonutWager bot in-game to link your account, then your rewards show up here.</p>
+      <div class="rw-tabs">
+        <button class="rw-tab active" data-rwtab="rakeback">Rakeback</button>
+        <button class="rw-tab" data-rwtab="levels">Level Rewards</button>
+      </div>
+
+      <div id="rw-panel-rakeback" class="rw-panel">
+        <div class="rw-rb-grid" id="rw-rb-grid"></div>
+      </div>
+
+      <div id="rw-panel-levels" class="rw-panel hidden">
+        <div class="rw-level-banner">
+          <div class="rw-level-circle"><span id="rw-level-num">0</span></div>
+          <div class="rw-level-pill" id="rw-level-pill">Level 0</div>
+          <div class="rw-level-bar"><div class="rw-level-bar-fill" id="rw-level-fill"></div></div>
+          <div class="rw-level-labels">
+            <span id="rw-level-cur">Level 0</span>
+            <b id="rw-level-pct">0%</b>
+            <span id="rw-level-next">Level 1</span>
+          </div>
+        </div>
+        <div class="rw-milestones" id="rw-milestones"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======== STATS ======== -->
+  <section class="page hidden" data-page="stats">
+    <h2 class="section-title">Stats</h2>
+    <div class="stats-cards" id="stats-cards"></div>
+    <h3 class="history-head">Recent bets</h3>
+    <table class="feed-table" id="stats-table">
+      <thead><tr><th>Game</th><th>Amount</th><th>Multiplier</th><th>Payout</th><th>Time</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <h3 class="history-head">Deposits &amp; withdrawals</h3>
+    <table class="feed-table" id="stats-tx-table">
+      <thead><tr><th>Date</th><th>Method</th><th>Type</th><th>Amount</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <!-- ======== SETTINGS ======== -->
+  <section class="page hidden" data-page="settings">
+    <h2 class="section-title">Settings</h2>
+    <div class="settings-list">
+      <div class="settings-row">
+        <div class="settings-row-text">
+          <b>Anonymous mode</b>
+          <span>Hide your name everywhere other players can see it — leaderboard, chat, live feed, and battles all show "Anonymous" instead.</span>
+        </div>
+        <button class="btn btn-ghost btn-small" id="settings-anon-toggle">Off</button>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-text">
+          <b>Sound</b>
+          <span>Toggle sound effects across the site.</span>
+        </div>
+        <button class="btn btn-ghost btn-small" id="settings-sound-toggle">On</button>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-text">
+          <b>Account</b>
+          <span id="settings-account-info">—</span>
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-text">
+          <b>Log out</b>
+          <span>Sign out of this browser. Your account and balance stay safe.</span>
+        </div>
+        <button class="btn btn-ghost btn-small dd-danger" id="settings-logout-btn">Log out</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======== LEADERBOARD ======== -->
+  <section class="page hidden" data-page="leaderboard">
+    <h2 class="section-title">Top wagerers</h2>
+    <div class="lb-podium" id="lb-podium"></div>
+    <ol class="lb-list" id="lb-list"></ol>
   </section>
 
   <!-- ======== DICE ======== -->
@@ -500,94 +604,6 @@
     </div>
   </section>
 
-  <!-- ======== DEPOSIT ======== -->
-  <section class="page hidden" data-page="deposit">
-    <div class="panel fair-panel">
-      <h2>Deposit Donuts</h2>
-      <p>Pay the bot in-game and your balance updates instantly on the site.</p>
-
-      <div id="deposit-unlinked">
-        <div class="fair-row" style="margin-top:16px">
-          <span>Step 1</span><span>Click <b>⛏ Link MC Account</b> in the top bar and pay the bot the shown amount</span>
-        </div>
-        <div class="fair-row">
-          <span>Step 2</span><span>Your Minecraft username becomes your site account automatically</span>
-        </div>
-        <div class="fair-row">
-          <span>Step 3</span><span>Pay the bot any amount — it goes straight to your site balance</span>
-        </div>
-        <button class="btn btn-green" style="margin-top:16px" id="deposit-link-btn">⛏ Link MC Account</button>
-      </div>
-
-      <div id="deposit-linked" class="hidden">
-        <div class="fair-row" style="margin-top:16px">
-          <span>Your MC username</span><code id="deposit-mc-name"></code>
-        </div>
-        <div class="fair-row">
-          <span>Bot to pay</span><code id="deposit-bot-name"></code>
-        </div>
-        <p style="margin-top:16px" class="hint">In-game type: <code id="deposit-cmd">/pay AALV1N &lt;amount&gt;</code></p>
-        <p class="hint">Your balance updates within a few seconds of the payment being received.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- ======== REWARDS ======== -->
-  <section class="page hidden" data-page="rewards">
-    <div class="panel fair-panel">
-      <h2>Rakeback</h2>
-      <p>Get a slice of everything you wager back, on a schedule.</p>
-      <div class="rb-grid" id="rb-grid"></div>
-    </div>
-    <div class="panel fair-panel" style="margin-top:16px">
-      <h2>Level <span id="rw-level">0</span></h2>
-      <div class="rb-bar"><div class="rb-bar-fill" id="rw-bar" style="width:0%"></div></div>
-      <p class="hint" id="rw-progress"></p>
-      <div class="rb-milestones" id="rw-milestones"></div>
-    </div>
-  </section>
-
-  <!-- ======== PROFILE ======== -->
-  <section class="page hidden" data-page="profile">
-    <div class="panel profile-head">
-      <img id="pf-avatar" class="pf-avatar" src="" alt="">
-      <div class="pf-id">
-        <strong id="pf-name"></strong>
-        <span class="pf-level">Level <span id="pf-level"></span></span>
-      </div>
-      <div class="pf-xp">
-        <div class="pf-xp-nums"><span id="pf-xp-cur"></span> / <span id="pf-xp-next"></span></div>
-        <div class="rb-bar"><div class="rb-bar-fill" id="pf-xp-bar" style="width:0%"></div></div>
-      </div>
-      <label class="pf-anon-toggle">
-        <input type="checkbox" id="pf-anon-check">
-        <span>Anonymous mode</span>
-      </label>
-    </div>
-
-    <div class="pf-stats">
-      <div class="pf-stat"><span>Total Deposited</span><strong id="pf-deposited"></strong></div>
-      <div class="pf-stat"><span>Total Withdrawn</span><strong id="pf-withdrawn"></strong></div>
-      <div class="pf-stat"><span>Total Wagered</span><strong id="pf-wagered"></strong></div>
-      <div class="pf-stat pf-profit"><span>Total Profit</span><strong id="pf-profit"></strong></div>
-    </div>
-
-    <div class="panel">
-      <h2>Transactions</h2>
-      <table class="pf-table">
-        <thead><tr><th>Date</th><th>Method</th><th>Type</th><th>Amount</th></tr></thead>
-        <tbody id="pf-tx-body"></tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- ======== LEADERBOARD ======== -->
-  <section class="page hidden" data-page="leaderboard">
-    <h2 class="section-title">Top wagerers</h2>
-    <div class="lb-podium" id="lb-podium"></div>
-    <ol class="lb-list" id="lb-list"></ol>
-  </section>
-
   <!-- ======== FAIRNESS ======== -->
   <section class="page hidden" data-page="fair">
     <div class="panel fair-panel">
@@ -598,25 +614,25 @@
         past bet yourself and confirm the hash matched. We can't change results after the fact —
         the hash would give it away.</p>
       <div id="fair-user" class="hidden">
-        <div class="fair-row"><span>Server seed hash</span><code id="fair-hash"></code></div>
-        <div class="fair-row"><span>Client seed</span><code id="fair-client"></code></div>
+        <div class="fair-row"><span>Server seed hash</span><code id="fair-hash"></code><button class="btn btn-ghost btn-tiny copy-btn" data-copy="fair-hash" title="copy">📋</button></div>
+        <div class="fair-row"><span>Client seed</span><code id="fair-client"></code><button class="btn btn-ghost btn-tiny copy-btn" data-copy="fair-client" title="copy">📋</button></div>
         <div class="fair-row"><span>Next nonce</span><code id="fair-nonce"></code></div>
         <label class="field"><span>New client seed (optional)</span>
           <input type="text" id="fair-newclient" maxlength="64" placeholder="leave empty for random">
         </label>
         <button class="btn btn-green" id="fair-rotate">Rotate &amp; reveal seed</button>
         <div id="fair-revealed" class="hidden">
-          <div class="fair-row"><span>Revealed server seed</span><code id="fair-revealed-seed"></code></div>
+          <div class="fair-row"><span>Revealed server seed</span><code id="fair-revealed-seed"></code><button class="btn btn-ghost btn-tiny copy-btn" data-copy="fair-revealed-seed" title="copy">📋</button></div>
           <p class="hint">Check it: sha256 of that seed should equal the old hash above.</p>
         </div>
       </div>
-      <p id="fair-signin" class="hint">Place a bet or sign in first, then your seeds show up here.</p>
+      <p id="fair-signin" class="hint">Pay a DonutWager bot in-game to link your account, then your seeds show up here.</p>
     </div>
   </section>
 </main>
 
 <footer class="footer">
-  <p>DonutWager · community-run for DonutSMP</p>
+  <p>DonutWager · the DonutSMP casino</p>
 </footer>
 </div><!-- /main-col -->
 
@@ -652,89 +668,47 @@
 
 <!-- ======== MODALS ======== -->
 <div class="modal-backdrop hidden" id="modal-backdrop">
-  <div class="modal" id="modal-login">
-    <h3>Welcome back</h3>
-    <label class="field"><span>Username</span><input type="text" id="login-user" maxlength="16" autocomplete="username"></label>
-    <label class="field"><span>Password</span><input type="password" id="login-pass" autocomplete="current-password"></label>
-    <p class="form-error" id="login-error"></p>
-    <button class="btn btn-green btn-block" id="login-submit">Sign in</button>
-    <p class="hint">No account? <a href="#" data-modal="register">Register</a> — takes 10 seconds.</p>
+  <div class="modal" id="modal-link">
+    <h3>Link Minecraft</h3>
+    <div id="link-step-start">
+      <p class="hint">No password needed — pay any DonutWager bot in-game with the exact amount shown and your Minecraft username becomes your DonutWager account automatically.</p>
+      <p class="form-error" id="link-error"></p>
+      <button class="btn btn-green btn-block" id="link-start-btn">Generate payment code</button>
+    </div>
+    <div id="link-step-pay" class="hidden">
+      <p class="hint">Run this in-game to link your account:</p>
+      <div class="link-cmd-box">
+        <code id="link-cmd"></code>
+        <button class="btn btn-ghost btn-small copy-btn" data-copy="link-cmd" title="copy">📋</button>
+      </div>
+      <p class="link-waiting"><span class="live-dot"></span> Waiting for payment…</p>
+      <p class="hint" id="link-expiry"></p>
+      <button class="btn btn-ghost btn-block" id="link-cancel-btn">Cancel</button>
+    </div>
   </div>
-  <div class="modal" id="modal-register">
-    <h3>Join the server</h3>
-    <label class="field"><span>Username (3-16, letters/numbers/_)</span><input type="text" id="reg-user" maxlength="16" autocomplete="username"></label>
-    <label class="field"><span>Password (6+ chars)</span><input type="password" id="reg-pass" autocomplete="new-password"></label>
-    <p class="form-error" id="reg-error"></p>
-    <button class="btn btn-green btn-block" id="reg-submit">Create account</button>
-    <p class="hint">Already registered? <a href="#" data-modal="login">Sign in</a></p>
+
+  <div class="modal hidden" id="modal-deposit">
+    <h3>⬆ Deposit Donuts</h3>
+    <p class="hint">Enter how much you want to deposit, then run the command in-game to pay the bot.</p>
+    <label class="field"><span>Amount</span><input type="text" id="deposit-amount" placeholder="e.g. 500K"></label>
+    <div class="link-cmd-box">
+      <code id="deposit-cmd">/pay AALV1N &lt;amount&gt;</code>
+      <button class="btn btn-ghost btn-small copy-btn" data-copy="deposit-cmd" title="copy">📋</button>
+    </div>
+    <p class="hint">Your balance updates within a few seconds of the payment being received.</p>
+    <button class="btn btn-ghost btn-block" id="deposit-close-btn">Close</button>
+  </div>
+
+  <div class="modal hidden" id="modal-withdraw">
+    <h3>⬇ Withdraw Donuts</h3>
+    <p class="hint">Enter how much to withdraw — it's paid straight back to your Minecraft account.</p>
+    <label class="field"><span>Amount</span><input type="text" id="withdraw-amount" placeholder="e.g. 500K"></label>
+    <p class="form-error" id="withdraw-error"></p>
+    <button class="btn btn-green btn-block" id="withdraw-go-btn">Withdraw</button>
   </div>
 </div>
 
 <div class="toast" id="toast"></div>
-
-<!-- WITHDRAW MODAL -->
-<div class="modal-backdrop hidden" id="withdraw-modal-backdrop">
-  <div class="modal" id="withdraw-modal">
-    <h3>⬇ Withdraw Donuts</h3>
-    <p class="hint">The bot will pay your Minecraft account in-game.</p>
-    <label class="field"><span>Amount</span>
-      <div class="amount-row">
-        <input type="text" id="withdraw-amount" placeholder="e.g. 500M">
-        <button class="btn btn-tiny" id="withdraw-max">Max</button>
-      </div>
-    </label>
-    <p class="form-error" id="withdraw-error"></p>
-    <button class="btn btn-green btn-block" id="withdraw-submit">Withdraw</button>
-    <button class="btn btn-ghost btn-small" id="withdraw-close" style="margin-top:10px">Close</button>
-  </div>
-</div>
-
-<!-- DEPOSIT MODAL -->
-<div class="modal-backdrop hidden" id="deposit-modal-backdrop">
-  <div class="modal">
-    <h3>⬆ Deposit Donuts</h3>
-    <p class="hint">Enter the amount you want to deposit, then run the command in Minecraft.</p>
-    <label class="field"><span>Amount</span>
-      <input type="text" id="deposit-modal-amount" placeholder="e.g. 500M">
-    </label>
-    <div id="deposit-modal-cmd" class="hidden">
-      <p class="hint" style="margin-top:10px">Type this in Minecraft:</p>
-      <code id="deposit-modal-code" style="display:block;font-size:1.1em;padding:12px;background:var(--bg2);border-radius:6px;margin:6px 0;word-break:break-all"></code>
-    </div>
-    <button class="btn btn-green btn-block" id="deposit-modal-generate">Generate command</button>
-    <button class="btn btn-ghost btn-small" id="deposit-modal-close" style="margin-top:10px">Close</button>
-  </div>
-</div>
-
-<!-- MC LINK MODAL -->
-<div class="modal-backdrop hidden" id="mc-modal-backdrop">
-  <div class="modal" id="mc-modal">
-    <h3>⛏ Link Minecraft Account</h3>
-
-    <!-- Step 1: generate payment -->
-    <div id="mc-link-start">
-      <p class="hint">Pay the bot a small random amount of Donuts in-game. Your Minecraft username becomes your site account — no password needed. The fee is instantly refunded.</p>
-      <button class="btn btn-green btn-block" id="mc-link-generate">Generate link payment</button>
-    </div>
-
-    <!-- Step 2: pending payment -->
-    <div id="mc-link-pending" class="hidden">
-      <p class="hint">In Minecraft, type this exact command:</p>
-      <code id="mc-link-cmd" style="display:block;font-size:1.1em;padding:12px;background:var(--bg2);border-radius:6px;margin:10px 0;word-break:break-all"></code>
-      <p class="hint">The bot will refund your payment and log you in. Expires in <b>10 minutes</b>.</p>
-      <button class="btn btn-ghost btn-block" id="mc-link-check">Check if linked</button>
-    </div>
-
-    <!-- Step 3: linked -->
-    <div id="mc-link-linked" class="hidden">
-      <p style="color:var(--green)">✅ Logged in as <b id="mc-linked-name"></b></p>
-      <p class="hint">Pay the bot again any time to deposit Donuts to your balance.</p>
-      <button class="btn btn-ghost btn-small" id="mc-unlink-btn">Unlink</button>
-    </div>
-
-    <button class="btn btn-ghost btn-small" id="mc-modal-close" style="margin-top:12px">Close</button>
-  </div>
-</div>
 
 <script src="/js/app.js"></script>
 </body>
