@@ -1,7 +1,6 @@
 // Mineflayer bot — detects in-game payments, links accounts, pays out winnings
 require('dotenv').config();
 const path = require('path');
-const fs = require('fs');
 const crypto = require('crypto');
 const mineflayer = require('mineflayer');
 const { SocksClient } = require('socks');
@@ -157,16 +156,33 @@ let recentConnectFails = 0; // consecutive fast disconnects - drives reconnect b
 
 async function createBot(name) {
   let bot;
+  // set once prismarine-auth asks for a device login, cleared once we're in.
+  // the connect timeout below refuses to fire while this is true - a human has
+  // to open a browser and type the code, which takes far longer than any
+  // reasonable connect timeout, and tearing the bot down mid-flow just issues
+  // a fresh code on the next attempt and loops forever.
+  let authPending = false;
   try {
+    const authFolder = path.join(DATA_DIR, '.bot-auth', name);
     const botOpts = {
       host: MC_HOST,
       port: MC_PORT,
       username: name,
       auth: MC_ONLINE ? 'microsoft' : 'offline',
-      profilesFolder: path.join(DATA_DIR, '.bot-auth', name),
+      profilesFolder: authFolder,
       hideErrors: false,
       checkTimeoutInterval: 60000,
       closeTimeout: 240000,
+      onMsaCode: (data) => {
+        authPending = true;
+        console.log(
+          `\n[mcBot] ${name} NEEDS MICROSOFT LOGIN — open ${data.verification_uri} ` +
+          `and enter code ${data.user_code}\n` +
+          `[mcBot] code valid for ${Math.round((data.expires_in || 900) / 60)} min. ` +
+          `caching to ${authFolder} — if that path is not on a mounted volume, ` +
+          `this login is lost on the next deploy and you will be asked again.\n`
+        );
+      },
     };
     if (MC_VERSION) botOpts.version = MC_VERSION;
     if (PROXY_HOST) {
@@ -194,18 +210,29 @@ async function createBot(name) {
     setTimeout(() => createBot(name), delay);
   }
 
-  // mineflayer's own connect-timeout can take minutes to give up if a proxy
-  // stream stalls mid-handshake, so back it with a shorter one of our own
-  const connectTimeout = setTimeout(() => {
-    console.error(`[mcBot] ${name} connection timed out — no login after 60s`);
-    bot.end();
-    setTimeout(() => scheduleReconnect('connect timeout'), 5000);
-  }, 60000);
+  // mineflayer's own connect-timeout can take minutes to give up if the stream
+  // stalls mid-handshake, so back it with one of our own. re-arms instead of
+  // firing while a device login is outstanding.
+  let connectTimer = null;
+  function armConnectTimeout(ms) {
+    clearTimeout(connectTimer);
+    connectTimer = setTimeout(() => {
+      if (authPending) {
+        console.log(`[mcBot] ${name} still waiting on Microsoft device login — holding connection open`);
+        return armConnectTimeout(120000);
+      }
+      console.error(`[mcBot] ${name} connection timed out — no login after 180s`);
+      bot.end();
+      setTimeout(() => scheduleReconnect('connect timeout'), 5000);
+    }, ms);
+  }
+  armConnectTimeout(180000);
 
   const loginAt = Date.now();
 
   bot.on('login', () => {
-    clearTimeout(connectTimeout);
+    authPending = false;
+    clearTimeout(connectTimer);
     console.log(`[mcBot] ${name} connected to ${MC_HOST}:${MC_PORT}`);
     _activeBot = bot;
 
@@ -268,21 +295,23 @@ async function createBot(name) {
   bot.on('error', (err) => {
     console.error(`[mcBot] ${name} ERROR:`, err.message);
     if (err.message.includes('Failed to obtain profile data') || err.message.includes('own minecraft')) {
-      const authFolder = path.join(DATA_DIR, '.bot-auth', name);
-      try {
-        fs.rmSync(authFolder, { recursive: true, force: true });
-        console.log(`[mcBot] Cleared invalid auth cache at ${authFolder}`);
-      } catch (e) {
-        console.error(`[mcBot] Failed to clear auth cache:`, e.message);
-      }
+      // deliberately NOT deleting the auth cache here. this error is often
+      // transient (MS outage, rate limit), and wiping the tokens forces a full
+      // device login - which nobody can complete on a headless host, so one
+      // blip would strand the bot permanently. if the cache really is bad,
+      // clear DATA_DIR/.bot-auth by hand and restart to re-run the login.
+      console.error(
+        `[mcBot] ${name} could not load its Minecraft profile. Leaving the auth cache in place — ` +
+        `if this persists, delete ${path.join(DATA_DIR, '.bot-auth', name)} and restart to re-authenticate.`
+      );
       bot.end();
-      clearTimeout(connectTimeout);
-      scheduleReconnect('invalid auth cache cleared');
+      clearTimeout(connectTimer);
+      scheduleReconnect('profile load failed');
     }
   });
 
   bot.on('end', (reason) => {
-    clearTimeout(connectTimeout);
+    clearTimeout(connectTimer);
     scheduleReconnect(reason || 'unknown');
   });
 }
@@ -293,6 +322,8 @@ function init() {
     return;
   }
   console.log(`[mcBot] Starting ${BOT_NAMES.length} bot(s) → ${MC_HOST}:${MC_PORT}`);
+  console.log(`[mcBot] Auth cache dir: ${path.join(DATA_DIR, '.bot-auth')}`);
+  console.log(`[mcBot] DATA_DIR ${process.env.DATA_DIR ? `= ${process.env.DATA_DIR}` : 'is UNSET — using the app dir, which is wiped on every deploy'}`);
   BOT_NAMES.forEach((name, i) => setTimeout(() => createBot(name), i * 3000));
 }
 
