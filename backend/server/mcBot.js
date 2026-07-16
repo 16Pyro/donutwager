@@ -204,6 +204,7 @@ async function createBot(name) {
     if (reconnectScheduled) return;
     reconnectScheduled = true;
     clearInterval(bot.balInterval);
+    clearInterval(bot.afkInterval);
     _activeBot = null;
     const wasStable = Date.now() - loginAt > 20000;
     recentConnectFails = wasStable ? 0 : recentConnectFails + 1;
@@ -258,6 +259,13 @@ async function createBot(name) {
     }
     setTimeout(pollBalance, 1500);
     bot.balInterval = setInterval(pollBalance, 60000);
+
+    // anti-AFK: this server kicks idle connections after ~20s, so nudge the
+    // client below that window. server owner has confirmed bots are allowed
+    // to do this (see drdonut's @everyone announcement, 2026-07-15).
+    bot.afkInterval = setInterval(() => {
+      try { if (bot && bot.entity) bot.swingArm(); } catch (e) {}
+    }, 15000);
   });
 
   bot.on('message', (jsonMsg) => {
