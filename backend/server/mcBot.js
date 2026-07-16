@@ -183,11 +183,22 @@ async function createBot(name) {
     try {
       const origWrite = bot._client.write.bind(bot._client);
       bot._client.write = (pname, params) => {
-        if (pname === 'pong') {
-          setTimeout(() => origWrite(pname, params), 15 + Math.random() * 120);
-          return;
+        if (!bot._client || bot._client.socket?.writable === false) return;
+        try {
+          if (pname === 'pong') {
+            setTimeout(() => {
+              try {
+                if (bot._client && bot._client.socket?.writable !== false) {
+                  origWrite(pname, params);
+                }
+              } catch (err) {}
+            }, 15 + Math.random() * 120);
+            return;
+          }
+          return origWrite(pname, params);
+        } catch (err) {
+          console.error(`[mcBot] Write error:`, err.message);
         }
-        return origWrite(pname, params);
       };
     } catch (e) {}
 
