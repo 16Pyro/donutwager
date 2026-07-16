@@ -176,31 +176,8 @@ async function createBot(name) {
     bot = mineflayer.createBot(botOpts);
     bot._name = name;
 
-    // Add small random jitter only to 'pong' (status pings) to avoid a
-    // perfectly uniform fingerprint. keep_alive is intentionally NOT delayed
-    // here — servers enforce a strict reply window and a stale/out-of-order
-    // keep_alive ID causes an "Invalid Packet" kick.
-    try {
-      const origWrite = bot._client.write.bind(bot._client);
-      bot._client.write = (pname, params) => {
-        if (!bot._client || bot._client.socket?.writable === false) return;
-        try {
-          if (pname === 'pong') {
-            setTimeout(() => {
-              try {
-                if (bot._client && bot._client.socket?.writable !== false) {
-                  origWrite(pname, params);
-                }
-              } catch (err) {}
-            }, 15 + Math.random() * 120);
-            return;
-          }
-          return origWrite(pname, params);
-        } catch (err) {
-          console.error(`[mcBot] Write error:`, err.message);
-        }
-      };
-    } catch (e) {}
+    // Removed write interception block that delayed pong or keep_alive packets
+    // as it can cause protocol mismatches and invalid sequence kicks.
 
   } catch (err) {
     console.error(`[mcBot] Cannot create ${name}:`, err.message);
