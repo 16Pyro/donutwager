@@ -175,21 +175,6 @@ async function createBot(name) {
     }
     bot = mineflayer.createBot(botOpts);
     bot._name = name;
-    // Our pong/keep_alive replies go out near-instantly (machine-precision
-    // timing) - a real client has natural jitter from rendering/input/OS
-    // scheduling. A timing-based anti-bot fingerprint could be keying off
-    // that unnaturally uniform reply latency, so add small random jitter
-    // before replying to the server's own pings/keepalives.
-    try {
-      const origWrite = bot._client.write.bind(bot._client);
-      bot._client.write = (pname, params) => {
-        if (pname === 'pong' || pname === 'keep_alive') {
-          setTimeout(() => origWrite(pname, params), 15 + Math.random() * 120);
-          return;
-        }
-        return origWrite(pname, params);
-      };
-    } catch (e) {}
   } catch (err) {
     console.error(`[mcBot] Cannot create ${name}:`, err.message);
     setTimeout(() => createBot(name), 30000);
