@@ -236,6 +236,15 @@ async function createBot(name) {
     console.log(`[mcBot] ${name} connected to ${MC_HOST}:${MC_PORT}`);
     _activeBot = bot;
 
+    // restart the command queue. drainCmdQueue() bails and nulls cmdTimer the
+    // moment _activeBot goes away, so without this a /pay queued just before a
+    // disconnect strands in memory forever - and index.js has already debited
+    // the player's balance by then. must run on every login, not just the first.
+    if (cmdQueue.length) {
+      console.log(`[mcBot] ${name} resuming ${cmdQueue.length} queued command(s)`);
+    }
+    if (!cmdTimer) drainCmdQueue();
+
     // keep the tracked bank balance current - queueWithdraw only decrements it
     // locally, so without a periodic re-read it drifts from the real in-game
     // balance for as long as the connection stays up
