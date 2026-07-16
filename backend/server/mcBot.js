@@ -8,7 +8,11 @@ const MC_HOST    = process.env.MC_HOST    || 'localhost';const MC_PORT    = pars
 
 function connectViaProxy(host, port) {return SocksClient.createConnection({proxy: { host: PROXY_HOST, port: PROXY_PORT, type: 5, userId: PROXY_USER, password: PROXY_PASS },command: 'connect',destination: { host, port },timeout: 15000,}).then((info) => info.socket);}
 
-const PAID_PATTERNS = [/^([\w.]+) paid you $?\s*([\d,]+(?:.\d+)?[kmb]?)[.\s]$/i,/^you (? )?received $?\s([\d,]+(?:.\d+)?[kmb]?) from ([\w.]+)/i,/^[Economy]\s*([\w.]+)\s*[→>]\s*(?|bot)[\s:]+$?\s*([\d,]+(?:.\d+)?[kmb]?)/i,];
+const PAID_PATTERNS = [
+  /^([\w.]+) paid you \$?\s*([\d,]+(?:\.\d+)?[kmb]?)/i,
+  /^you (?:have )?received \$?\s*([\d,]+(?:\.\d+)?[kmb]?) from ([\w.]+)/i,
+  /^\[Economy\]\s*([\w.]+)\s*[→>]\s*(?:you|bot)[\s:]+\$?\s*([\d,]+(?:\.\d+)?[kmb]?)/i,
+];
 
 let _activeBot = null;let awaitingBalance = false;   // true right after we send /bal, until the reply lands or times outlet balanceTimeout = null;
 
