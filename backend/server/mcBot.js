@@ -270,7 +270,9 @@ async function createBot(name) {
 
   bot.on('error', (err) => {
     console.error(`[mcBot] ${name} ERROR:`, err.message);
-    if (err.message.includes('Failed to obtain profile data') || err.message.includes('own minecraft')) {
+    // Only wipe session cache if Microsoft explicitly rejects the authentication token,
+    // rather than on transient Minecraft profile ownership checking failures.
+    if (err.message.includes('Invalid credentials') || err.message.includes('Active directory error')) {
       const authFolder = path.join(DATA_DIR, '.bot-auth', name);
       try {
         fs.rmSync(authFolder, { recursive: true, force: true });
