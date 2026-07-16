@@ -17,11 +17,13 @@ const BOT_NAMES  = (process.env.BOT_NAMES || 'DonutWager')
   .split(',').map(s => s.trim()).filter(Boolean);
 const DATA_DIR   = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 
-// route the game connection through a residential SOCKS5 proxy so the server
-// sees a home IP instead of Railway's datacenter range, which anti-bot/anti-VPN
-// plugins reject outright. only affects the Minecraft connection - the web
-// server itself is untouched.
-const PROXY_HOST = process.env.PROXY_HOST || null;
+// Optional SOCKS5 proxy for the Minecraft connection. Off unless PROXY_ENABLED
+// is explicitly 'true' - the PROXY_* credentials can stay in the environment
+// (they're a paid service shared with other projects) without this bot using
+// them. Setting PROXY_HOST alone does nothing; enabling is a deliberate act.
+// Only affects the game connection - the web server is untouched either way.
+const PROXY_ENABLED = process.env.PROXY_ENABLED === 'true';
+const PROXY_HOST = PROXY_ENABLED ? (process.env.PROXY_HOST || null) : null;
 const PROXY_PORT = parseInt(process.env.PROXY_PORT || '0');
 const PROXY_USER = process.env.PROXY_USER || undefined;
 const PROXY_PASS = process.env.PROXY_PASS || undefined;
@@ -332,6 +334,11 @@ function init() {
   }
   console.log(`[mcBot] Starting ${BOT_NAMES.length} bot(s) → ${MC_HOST}:${MC_PORT}`);
   console.log(`[mcBot] Auth cache dir: ${path.join(DATA_DIR, '.bot-auth')}`);
+  console.log(`[mcBot] Proxy: ${
+    PROXY_ENABLED
+      ? `ENABLED → ${process.env.PROXY_HOST || '(PROXY_ENABLED set but PROXY_HOST missing!)'}`
+      : `disabled — connecting directly${process.env.PROXY_HOST ? ' (PROXY_* creds present but unused; set PROXY_ENABLED=true to use them)' : ''}`
+  }`);
   console.log(`[mcBot] DATA_DIR ${process.env.DATA_DIR ? `= ${process.env.DATA_DIR}` : 'is UNSET — using the app dir, which is wiped on every deploy'}`);
   BOT_NAMES.forEach((name, i) => setTimeout(() => createBot(name), i * 3000));
 }
