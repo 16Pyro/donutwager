@@ -15,11 +15,11 @@
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^11.3.0",
-    "donutwager-root": "file:..",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-session": "^1.19.0",
     "mineflayer": "^4.25.0",
-    "prismarine-auth": "^2.4.0"
+    "prismarine-auth": "^2.4.0",
+    "socks": "^2.8.9"
   }
 }

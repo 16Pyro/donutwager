@@ -59,6 +59,14 @@ CREATE TABLE IF NOT EXISTS transactions (
   amount INTEGER NOT NULL,
   created_at INTEGER NOT NULL
 );
+
+-- generic key/value settings store (e.g. the admin win-chance override) - shared
+-- between the running server and one-off scripts like admin.js, since both talk
+-- to the same sqlite file rather than an in-memory variable only one process sees
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);
 `);
 
 // additive migrations for older DBs
@@ -73,6 +81,7 @@ for (const col of [
   'rb_weekly_base INTEGER NOT NULL DEFAULT 0', 'rb_weekly_at INTEGER NOT NULL DEFAULT 0',
   'rb_monthly_base INTEGER NOT NULL DEFAULT 0', 'rb_monthly_at INTEGER NOT NULL DEFAULT 0',
   'level_claimed INTEGER NOT NULL DEFAULT 0',
+  'level_claimed_list TEXT NOT NULL DEFAULT \'\'', // comma-separated specific milestone levels claimed
   'total_deposited INTEGER NOT NULL DEFAULT 0',
   'total_withdrawn INTEGER NOT NULL DEFAULT 0',
   'anonymous INTEGER NOT NULL DEFAULT 0',
@@ -127,7 +136,7 @@ const stmts = {
   insertChat: db.prepare('INSERT INTO chat_messages (user_id, message, created_at) VALUES (?, ?, ?)'),
   recentChat: db.prepare(`SELECT c.id, c.message, c.created_at, u.total_wagered,
     CASE WHEN u.anonymous THEN 'Anonymous' ELSE u.username END AS username
-    FROM chat_messages c JOIN users u ON u.id = c.user_id WHERE c.id > ? ORDER BY c.id DESC LIMIT 50`),
+    FROM chat_messages c JOIN users u ON u.id = c.user_id WHERE c.id > ? ORDER BY c.id DESC LIMIT 150`),
   getUserByMc: db.prepare('SELECT * FROM users WHERE mc_username = ? COLLATE NOCASE'),
   setMcUsername: db.prepare('UPDATE users SET mc_username = ? WHERE id = ?'),
   createMcUser: db.prepare(`INSERT OR IGNORE INTO users
@@ -149,6 +158,7 @@ const stmts = {
   claimWeeklyRb: db.prepare('UPDATE users SET rb_weekly_base = ?, rb_weekly_at = ? WHERE id = ?'),
   claimMonthlyRb: db.prepare('UPDATE users SET rb_monthly_base = ?, rb_monthly_at = ? WHERE id = ?'),
   setLevelClaimed: db.prepare('UPDATE users SET level_claimed = ? WHERE id = ?'),
+  setLevelClaimedList: db.prepare('UPDATE users SET level_claimed_list = ? WHERE id = ?'),
   addDeposited: db.prepare('UPDATE users SET total_deposited = total_deposited + ? WHERE id = ?'),
   addWithdrawn: db.prepare('UPDATE users SET total_withdrawn = total_withdrawn + ? WHERE id = ?'),
   insertTx: db.prepare(`INSERT INTO transactions (user_id, method, type, amount, created_at)
@@ -156,6 +166,9 @@ const stmts = {
   myTx: db.prepare(`SELECT method, type, amount, created_at FROM transactions
     WHERE user_id = ? ORDER BY id DESC LIMIT 50`),
   setAnonymous: db.prepare('UPDATE users SET anonymous = ? WHERE id = ?'),
+  getSetting: db.prepare('SELECT value FROM settings WHERE key = ?'),
+  setSetting: db.prepare(`INSERT INTO settings (key, value) VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value`),
 };
 
 module.exports = { db, stmts };
