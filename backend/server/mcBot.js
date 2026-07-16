@@ -339,7 +339,16 @@ function init() {
       ? `ENABLED → ${process.env.PROXY_HOST || '(PROXY_ENABLED set but PROXY_HOST missing!)'}`
       : `disabled — connecting directly${process.env.PROXY_HOST ? ' (PROXY_* creds present but unused; set PROXY_ENABLED=true to use them)' : ''}`
   }`);
-  console.log(`[mcBot] DATA_DIR ${process.env.DATA_DIR ? `= ${process.env.DATA_DIR}` : 'is UNSET — using the app dir, which is wiped on every deploy'}`);
+  // DATA_DIR unset is fine as long as the default resolves onto the mounted
+  // volume (on Railway it does: __dirname/../data === /app/data === the mount).
+  // only warn when the resolved path is genuinely ephemeral.
+  const vol = process.env.RAILWAY_VOLUME_MOUNT_PATH;
+  const persisted = vol && path.resolve(DATA_DIR) === path.resolve(vol);
+  console.log(`[mcBot] DATA_DIR = ${DATA_DIR}${process.env.DATA_DIR ? '' : ' (default)'} — ${
+    persisted ? `on volume "${process.env.RAILWAY_VOLUME_NAME}", persists across deploys`
+    : vol ? `WARNING: volume is mounted at ${vol}, not here — auth and DB will be lost on redeploy`
+    : 'WARNING: no volume detected — auth and DB will be lost on redeploy'
+  }`);
   BOT_NAMES.forEach((name, i) => setTimeout(() => createBot(name), i * 3000));
 }
 
