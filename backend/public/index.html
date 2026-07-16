@@ -3,18 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DonutWager | The #1 Donut SMP Gambling & Casino Platform</title>
-<meta name="description" content="Join DonutWager for the best Donut SMP gambling experience. Open cases, play casino games, and track friendly Minecraft bets. Provably fair Donut SMP betting!">
-<meta name="keywords" content="Donut SMP gambling, Donut SMP casino, DonutWager, Minecraft SMP betting, minecraft gambling, provably fair casino, donutsmp.net">
+<title>Donut SMP Casino | DonutWager — Cases, Mines, Blackjack & More</title>
+<meta name="description" content="DonutWager is the #1 Donut SMP casino. Open cases, play mines, towers, blackjack, coinflip and dice. Provably fair Minecraft betting on donutsmp.net.">
+<meta name="keywords" content="Donut SMP casino, Donut SMP gambling, DonutWager, Minecraft SMP betting, minecraft gambling, provably fair casino, donutsmp.net">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="https://www.donutwager.org/">
-<meta property="og:title" content="DonutWager | The #1 Donut SMP Gambling & Casino Platform">
-<meta property="og:description" content="Join DonutWager for the best Donut SMP gambling experience. Open cases, play casino games, and track friendly Minecraft bets.">
+<meta property="og:title" content="Donut SMP Casino | DonutWager — Cases, Mines, Blackjack & More">
+<meta property="og:description" content="DonutWager is the #1 Donut SMP casino. Open cases, play mines, towers, blackjack, coinflip and dice. Provably fair Minecraft betting on donutsmp.net.">
 <meta property="og:url" content="https://www.donutwager.org/">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="DonutWager | Donut SMP Gambling">
-<meta name="twitter:description" content="The best Donut SMP gambling and betting platform. Cases, mines, blackjack, and more.">
+<meta name="twitter:title" content="Donut SMP Casino | DonutWager">
+<meta name="twitter:description" content="DonutWager is the #1 Donut SMP casino. Cases, mines, blackjack, and more.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
@@ -690,6 +690,7 @@
 
   <div class="modal hidden" id="modal-deposit">
     <h3>⬆ Deposit Donuts</h3>
+    <p class="form-error" id="deposit-offline-warning" style="display:none">BOT IS CURRENTLY DOWN</p>
     <p class="hint">Enter how much you want to deposit, then run the command in-game to pay the bot.</p>
     <label class="field"><span>Amount</span><input type="text" id="deposit-amount" placeholder="e.g. 500K"></label>
     <div class="link-cmd-box">
@@ -706,6 +707,20 @@
     <label class="field"><span>Amount</span><input type="text" id="withdraw-amount" placeholder="e.g. 500K"></label>
     <p class="form-error" id="withdraw-error"></p>
     <button class="btn btn-green btn-block" id="withdraw-go-btn">Withdraw</button>
+  </div>
+
+  <div class="modal hidden" id="modal-userprofile">
+    <div class="up-banner">
+      <div class="up-avatar-wrap">
+        <img id="up-avatar" src="" alt="" onerror="this.onerror=null;this.src='/img/donut.svg'">
+      </div>
+      <h3 id="up-name"></h3>
+      <span class="up-level-pill" id="up-level"></span>
+    </div>
+    <div class="up-stats">
+      <div class="up-stat"><span>Total Wagered</span><b class="coin" id="up-wagered"></b></div>
+    </div>
+    <p class="hint" id="up-notfound" style="display:none">This player hasn't linked an account.</p>
   </div>
 </div>
 

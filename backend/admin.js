@@ -2,7 +2,10 @@
 // node admin.js bal Y5AK
 // node admin.js addbal Y5AK 1000000
 // node admin.js setbal Y5AK 0
+// node admin.js winchance 75
+// node admin.js winchance off
 const { stmts } = require('./server/db');
+const games = require('./server/games');
 const [,, cmd, target, val] = process.argv;
 
 function getUser(name) {
@@ -42,6 +45,20 @@ if (cmd === 'bal') {
   const users = stmts.leaderboard.all();
   users.forEach(u => console.log(`${u.username}: ${(u.total_wagered/100).toLocaleString()}`));
 
+} else if (cmd === 'winchance') {
+  if (!target || /^off$/i.test(target)) {
+    games.setWinChance(null);
+    console.log('Win chance override OFF — games back to normal provably-fair odds');
+  } else {
+    const pct = Number(target);
+    if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+      console.log('Usage: node admin.js winchance <0-100> | off');
+    } else {
+      games.setWinChance(pct);
+      console.log(`Win chance set to ${pct}% for all games`);
+    }
+  }
+
 } else {
-  console.log('Commands: bal <user> | addbal <user> <amount> | setbal <user> <amount> | list');
+  console.log('Commands: bal <user> | addbal <user> <amount> | setbal <user> <amount> | list | winchance <0-100|off>');
 }

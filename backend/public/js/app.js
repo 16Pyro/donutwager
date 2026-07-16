@@ -9,6 +9,14 @@ let me = null; // { username, balance, ... }
 // matches server/db.js - the name shown for anyone in anonymous mode
 const HIDDEN_NAME = 'Anonymous';
 
+// Bedrock (Xbox/mobile/etc) usernames on Java-bridged servers are conventionally
+// prefixed with "." and aren't real Java accounts, so minotar can't resolve a
+// real skin for them - give them the default Steve head instead of a broken lookup
+function avatarUrl(name, size) {
+  const isBedrock = typeof name === 'string' && name.startsWith('.');
+  return `https://minotar.net/helm/${isBedrock ? 'char' : encodeURIComponent(name || '')}/${size}.png`;
+}
+
 // ---------- tiny api helper ----------
 async function api(path, body) {
   const res = await fetch('/api/' + path, {
@@ -17,7 +25,11 @@ async function api(path, body) {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'request failed');
+  if (!res.ok) {
+    // not linked yet - prompt linking instead of just erroring out
+    if (res.status === 401 && path !== 'me') showModal('link');
+    throw new Error(data.error || 'request failed');
+  }
   // opportunistically refresh identity if we don't have one cached yet (e.g.
   // right after a Minecraft link gets confirmed) - cheap no-op otherwise
   if (!me && path !== 'me') await loadMe();
@@ -208,9 +220,26 @@ function showModal(name) {
   $('#modal-link').classList.toggle('hidden', name !== 'link');
   $('#modal-deposit').classList.toggle('hidden', name !== 'deposit');
   $('#modal-withdraw').classList.toggle('hidden', name !== 'withdraw');
+  $('#modal-userprofile').classList.toggle('hidden', name !== 'userprofile');
   if (name === 'link') openLinkModal();
   if (name === 'deposit') openDepositModal();
   if (name === 'withdraw') { $('#withdraw-error').textContent = ''; $('#withdraw-amount').value = ''; }
+}
+async function openUserProfile(username) {
+  showModal('userprofile');
+  $('#up-name').textContent = username;
+  $('#up-avatar').src = avatarUrl(username, 64);
+  $('#up-level').textContent = '';
+  $('#up-wagered').textContent = '';
+  $('#up-notfound').style.display = 'none';
+  try {
+    const u = await api('user/' + encodeURIComponent(username));
+    $('#up-name').textContent = u.username;
+    $('#up-level').textContent = `Level ${u.level}`;
+    $('#up-wagered').textContent = fmt(u.totalWagered);
+  } catch {
+    $('#up-notfound').style.display = '';
+  }
 }
 function hideModal() { $('#modal-backdrop').classList.add('hidden'); stopLinkPoll(); }
 
@@ -230,9 +259,13 @@ function updateDepositCmd() {
   $('#deposit-cmd').textContent = `/pay ${_depositBot} ${amountText}`;
 }
 async function openDepositModal() {
+  let online = true;
   if (!_botNames) {
-    try { const d = await api('mc/bots'); _botNames = d.bots; } catch { _botNames = ['AALV1N']; }
+    try { const d = await api('mc/bots'); _botNames = d.bots; online = d.online; } catch { _botNames = ['AALV1N']; }
+  } else {
+    try { online = (await api('mc/bots')).online; } catch {}
   }
+  $('#deposit-offline-warning').style.display = online ? 'none' : '';
   _depositBot = _botNames[0];
   $('#deposit-amount').value = '';
   updateDepositCmd();
@@ -271,7 +304,8 @@ function applyUser(user) {
   if (user) {
     $('#username-label').textContent = user.mcUsername || user.username;
     $('#balance').textContent = fmt(user.balance);
-    $('#profile-avatar').src = `https://minotar.net/helm/${user.mcUsername || user.username}/64.png`;
+    $('#profile-avatar').onerror = function () { this.onerror = null; this.src = '/img/donut.svg'; };
+    $('#profile-avatar').src = avatarUrl(user.mcUsername || user.username, 64);
     $('#profile-avatar').alt = `${user.mcUsername || user.username} avatar`;
   }
 }
@@ -288,7 +322,7 @@ async function openLinkModal() {
   $('#link-error').textContent = '';
   try {
     const s = await api('mc/link/poll');
-    if (s.status === 'pending') showLinkPending();
+    if (s.status === 'pending') showLinkPending(s);
     else showLinkStep('start');
   } catch { showLinkStep('start'); }
 }
@@ -557,13 +591,19 @@ async function openSingle() {
   if (caseSpinning || !detailCase) return;
   const btn = $('#cases-open'), msg = $('#cases-msg');
   const stage = $('#case-stage'), arena = $('#open-arena');
+  // same leak as battles: navigating away only hides the page, it doesn't stop
+  // this in-flight animation - check we're still here before every sound cue
+  const stillHere = () => lastRoutedPage === 'cases';
+  spoilerGuardStart = Date.now();
   let d;
   try { d = await api('cases/open', { caseId: detailCase.id, qty: caseQty }); }
   catch (e) { toast(e.message); return; }
+  spoilerGuardUntil = Date.now() + 8000; // covers the spin + settle below
 
   caseSpinning = true; btn.disabled = true;
   msg.textContent = 'Grabbing EOS Block...'; msg.className = 'stage-msg';
   await sleep(550);
+  if (!stillHere()) { caseSpinning = false; btn.disabled = false; return; }
   msg.textContent = 'Opening…'; msg.className = 'stage-msg';
   const pool = detailCase.items;
   // the rarest pull drives the intensity of the climax
@@ -583,12 +623,14 @@ async function openSingle() {
 
   const DUR = 4200;
   await Promise.all(d.results.map((r, i) => btSpin(reels[i], pool, r.item, DUR)));
+  if (!stillHere()) { caseSpinning = false; btn.disabled = false; return; }
 
   // land: flourish scaled by the best pull
   reels.forEach((reel) => reel.parentElement.classList.add('landed'));
   if (top.flash) screenFlash(stage);
   if (top.tier >= 5) SND.impact(top.tier === 6 ? 1 : 0.7); else SND.reveal(top.tier);
   await sleep(200);
+  if (!stillHere()) { caseSpinning = false; btn.disabled = false; return; }
 
   // settle
   stage.classList.remove('dim');
@@ -741,7 +783,7 @@ $('#lineup-add-btn').onclick = openPicker;
 $('#battle-create-go').onclick = async () => {
   if (!lineup.length) return toast('add at least one case');
   try {
-    const d = await api('battles/create', { lineup, mode: battleMode, size: battleSize });
+    const d = await api('battles/create', { lineup, mode: battleMode, size: battleSize, speed: battleSpeed });
     SND.pop();
     lineup = [];
     enterRoom(d.id, d.battle);
@@ -786,7 +828,7 @@ function historyRow(b) {
     const cell = document.createElement('div');
     cell.className = 'hr-player ' + (won ? 'won' : 'lost');
     const skin = avatarSkin(p, (p.name || '?') + ':' + i);
-    cell.innerHTML = `<div class="hr-pfp"><img src="https://minotar.net/helm/${skin}/40.png" alt="${p.name} avatar" loading="lazy">${won ? '<span class="hr-crown">🏆</span>' : ''}</div>
+    cell.innerHTML = `<div class="hr-pfp"><img src="${avatarUrl(skin, 40)}" alt="${p.name} avatar" loading="lazy" onerror="this.onerror=null;this.src='/img/donut.svg'">${won ? '<span class="hr-crown">🏆</span>' : ''}</div>
       <span class="hr-name">${p.name}</span>
       <span class="hr-amt">${won ? '+' + fmt(r.share) : fmt(r.totals[i])}</span>`;
     players.appendChild(cell);
@@ -818,7 +860,7 @@ function seatEls(b) {
     const seat = document.createElement('span');
     const p = b.players[i];
     seat.className = 'b-seat' + (p ? ' filled' + (p.bot ? ' bot' : '') : '');
-    seat.innerHTML = p ? `<img src="https://minotar.net/helm/${avatarSkin(p, p.name + ':' + i)}/32.png" alt="${p.name} avatar" loading="lazy">` : '·';
+    seat.innerHTML = p ? `<img src="${avatarUrl(avatarSkin(p, p.name + ':' + i), 32)}" alt="${p.name} avatar" loading="lazy" onerror="this.onerror=null;this.src='/img/donut.svg'">` : '·';
     seat.title = p ? p.name : 'open seat';
     frag.appendChild(seat);
   }
@@ -987,7 +1029,7 @@ function avatarSkin(p, seatKey) {
 function playerAvatarHTML(p, seat = 0) {
   if (!p) return `<div class="bt-avatar empty">·</div>`;
   const skin = avatarSkin(p, (p.name || '?') + ':' + seat);
-  return `<div class="bt-avatar${p.bot ? ' bot' : ''}"><img src="https://minotar.net/helm/${skin}/48.png" alt="${p.name} avatar" loading="lazy"></div>`;
+  return `<div class="bt-avatar${p.bot ? ' bot' : ''}"><img src="${avatarUrl(skin, 48)}" alt="${p.name} avatar" loading="lazy" onerror="this.onerror=null;this.src='/img/donut.svg'"></div>`;
 }
 function weightedPick(items) {
   let r = Math.random() * items.reduce((s, i) => s + i.chance, 0);
@@ -1177,10 +1219,21 @@ function jackpotSpin(players, totals, winnerSeat, dur) {
 
 async function animateBattle(b) {
   const r = b.result;
+  // clearing roomPoll (on navigating away) only stops future polling - this
+  // function is already mid-flight with its own chain of awaits, so without an
+  // explicit "are we still watching this" check it keeps running to completion
+  // in the background, still playing land/win/loss sounds after you've left
+  const myWatchId = b.id;
+  const stillWatching = () => watchingId === myWatchId;
+  // the battle's speed is whatever the creator picked, stored server-side and
+  // sent back with the battle - every viewer (creator, joiners, spectators)
+  // uses this instead of their own local speed preference, so instant is
+  // actually instant for everyone watching, not just the person who set it
+  const speed = b.speed || 'normal';
   $('#room-msg').textContent = 'Grabbing EOS Block...';
   $('#room-msg').className = 'stage-msg';
-  
-  if (battleSpeed !== 'instant') {
+
+  if (speed !== 'instant') {
     if (r.resolvedAt) {
       // Start the animation roughly 2 seconds after the server resolves it to sync clients
       const toWait = (r.resolvedAt + 2000) - Date.now();
@@ -1189,6 +1242,7 @@ async function animateBattle(b) {
       await sleep(550);
     }
   }
+  if (!stillWatching()) return;
 
   const h = buildBattleArena(b, true);
   const roundsN = r.rounds.length;
@@ -1197,7 +1251,7 @@ async function animateBattle(b) {
   $('#jp-wrap').classList.add('hidden'); // reset from any previous jackpot reveal
 
   const scases = h.strip.querySelectorAll('.bt-scase');
-  const spinDur = battleSpeed === 'instant' ? 0 : battleSpeed === 'quick' ? 1500 : 2700;
+  const spinDur = speed === 'instant' ? 0 : speed === 'quick' ? 1500 : 2700;
   const running = b.players.map(() => 0);
 
   for (let round = 0; round < roundsN; round++) {
@@ -1221,6 +1275,7 @@ async function animateBattle(b) {
       }
       return btSpin(h.reels[pi], pool || [it], it, spinDur);
     }));
+    if (!stillWatching()) return;
 
     let topTier = 0;
     b.players.forEach((p, pi) => {
@@ -1232,10 +1287,11 @@ async function animateBattle(b) {
       running[pi] += it.value;
       countUp(h.vals[pi], running[pi], 450);
     });
-    if (topTier >= 5) SND.impact(0.6); else SND.reveal(Math.min(topTier, 4));
+    if (stillWatching()) { if (topTier >= 5) SND.impact(0.6); else SND.reveal(Math.min(topTier, 4)); }
     // brief pause on the landed item before the next case spins up - long enough to
     // actually read what you pulled, short enough not to drag out a multi-round battle
-    await sleep(battleSpeed === 'instant' ? 150 : 800);
+    await sleep(speed === 'instant' ? 150 : 800);
+    if (!stillWatching()) return;
   }
 
   // winner columns are identified by SEAT (names aren't unique — all bots are "bots")
@@ -1243,10 +1299,11 @@ async function animateBattle(b) {
 
   // jackpot: the pot goes to one seat/team picked with odds proportional to what
   // each side pulled - spin the wheel so that's visible before revealing the winner
-  if (r.mode === 'jackpot' && battleSpeed !== 'instant') {
+  if (r.mode === 'jackpot' && speed !== 'instant') {
     $('#room-msg').textContent = 'Spinning the jackpot…';
     await jackpotSpin(b.players, r.totals, winnerSeats[0], 4200);
   }
+  if (!stillWatching()) return;
 
   scases.forEach((e) => e.classList.remove('active'));
   b.players.forEach((p, i) => {
@@ -1817,7 +1874,8 @@ function chatAdd(m) {
   el.className = 'chat-msg' + (m.mine ? ' mine' : '');
   const pfp = document.createElement('img');
   pfp.className = 'chat-pfp'; pfp.alt = ''; pfp.loading = 'lazy';
-  pfp.src = `https://minotar.net/helm/${m.username === HIDDEN_NAME ? 'MHF_Question' : m.username}/24.png`;
+  pfp.onerror = function () { this.onerror = null; this.src = '/img/donut.svg'; };
+  pfp.src = m.username === HIDDEN_NAME ? 'https://minotar.net/helm/MHF_Question/24.png' : avatarUrl(m.username, 24);
   el.appendChild(pfp);
   const card = document.createElement('div');
   card.className = 'chat-card';
@@ -1825,6 +1883,10 @@ function chatAdd(m) {
   nameLine.className = 'chat-name-line';
   const who = document.createElement('span');
   who.className = 'who'; who.textContent = m.username;
+  if (m.username !== HIDDEN_NAME) {
+    who.classList.add('clickable-name');
+    who.onclick = () => openUserProfile(m.username);
+  }
   nameLine.appendChild(who);
   if (typeof m.level === 'number') {
     const lvl = document.createElement('span');
@@ -1850,7 +1912,7 @@ async function refreshChat() {
     const stick = body.scrollHeight - body.scrollTop - body.clientHeight < 60;
     messages.forEach(chatAdd);
     chatLastId = messages[messages.length - 1].id;
-    while (body.children.length > 80) body.removeChild(body.firstChild);
+    while (body.children.length > 200) body.removeChild(body.firstChild);
     if (stick) body.scrollTop = body.scrollHeight;
   } catch {}
 }
@@ -1874,7 +1936,7 @@ const GAME_ICON = {
   blackjack: 'filled_map', dice: 'rabbit_foot', chicken: 'chicken',
 };
 const GAME_LABEL = {
-  cases: 'Cases', battle: 'Case Battle', mines: 'Mines', towers: 'Towers', coinflip: 'Coinflip',
+  cases: 'Single Case', battle: 'Case Battles', mines: 'Mines', towers: 'Towers', coinflip: 'Coinflip',
   blackjack: 'Blackjack', dice: 'Dice', chicken: 'Chicken',
 };
 let lastFeedKey = '', lastFeedBets = [], feedFilter = 'all';
@@ -1883,17 +1945,26 @@ function feedRow(b, isNew) {
   const mult = b.multiplier || 0;
   return `<tr class="${isNew ? 'new-row' : ''}">
     <td><span class="feed-game"><img src="/img/items/${GAME_ICON[b.game] || 'barrel'}.png" alt="${GAME_LABEL[b.game] || b.game}">${GAME_LABEL[b.game] || b.game}</span></td>
-    <td><span class="feed-user"><img class="feed-avatar" src="https://minotar.net/helm/${b.username}/32.png" alt="${b.username} avatar" loading="lazy">${b.username}</span></td>
+    <td><span class="feed-user"><img class="feed-avatar" src="${avatarUrl(b.username, 32)}" alt="${b.username} avatar" loading="lazy" onerror="this.onerror=null;this.src='/img/donut.svg'"><span class="feed-username" data-username="${b.username}">${b.username}</span></span></td>
     <td><span class="feed-amt coin">${fmt(b.amount)}</span></td>
     <td><span class="feed-mult">${mult ? 'x' + mult.toFixed(2) : 'x0.00'}</span></td>
     <td><span class="feed-payout ${won ? 'good' : 'bad'} coin">${won ? '+' + fmt(b.payout) : '0'}</span></td>
     <td><span class="feed-time">${new Date(b.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</span></td>
   </tr>`;
 }
+// while a case (single or battle) is spinning on screen, the server has already
+// settled it - hide it from the live feed until the reveal actually plays out,
+// so a fast poll tick can't spoil your own result before you see it land
+let spoilerGuardUntil = 0;
+let spoilerGuardStart = 0;
 function renderFeed() {
   const tbody = $('#feed-table tbody');
   if (!tbody) return;
   let bets = lastFeedBets;
+  const myName = me && (me.mcUsername || me.username);
+  if (myName && Date.now() < spoilerGuardUntil) {
+    bets = bets.filter((b) => !(b.username === myName && b.created_at >= spoilerGuardStart));
+  }
   if (feedFilter === 'high') bets = bets.filter((b) => b.payout > 0).slice().sort((a, b) => b.payout - a.payout);
   else if (feedFilter === 'lucky') bets = bets.filter((b) => (b.multiplier || 0) >= 3).slice().sort((a, b) => b.multiplier - a.multiplier);
   tbody.innerHTML = bets.map((b, i) => feedRow(b, feedFilter === 'all' && i === 0 && lastFeedIsNew)).join('');
@@ -1917,20 +1988,33 @@ async function refreshFeed() {
 async function refreshBoard() {
   try {
     const { top } = await api('leaderboard');
-    $('#leaderboard').innerHTML = top.map((u) => `<li>${u.username} <b>${fmt(u.wagered)}</b></li>`).join('')
+    $('#leaderboard').innerHTML = top.map((u) => `<li><span class="clickable-name" data-username="${u.username}">${u.username}</span> <b>${fmt(u.wagered)}</b></li>`).join('')
       || '<li>Nobody yet — be the first degenerate.</li>';
   } catch {}
 }
+// one delegated handler covers every [data-username] element added anywhere
+// (leaderboard rows, feed rows) without wiring a click per render call
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-username]');
+  if (el && el.dataset.username !== HIDDEN_NAME) openUserProfile(el.dataset.username);
+});
 setInterval(refreshFeed, 5000);
 setInterval(refreshBoard, 30000);
+// balance only used to refresh on page load, so a deposit the bot detects
+// in-game never showed up until you manually refreshed the page
+setInterval(async () => {
+  if (!me) return;
+  try { const d = await api('me'); if (d.user) setBalance(d.user.balance); } catch {}
+}, 5000);
 
 // ---- dedicated leaderboard page: top-3 podium + ranks 4-20 ----
 // fixed prizes for the top 3 wagerers - nobody else on the board gets a reward
 const LB_PRIZE = { 1: 500_000_000, 2: 200_000_000, 3: 100_000_000 };
 function lbAvatar(name) {
-  // anonymous players have no avatarName from the server - show a neutral icon instead
+  // anonymous players have no avatarName from the server - show a neutral icon instead.
+  // onerror covers minotar failing/rate-limiting, which otherwise leaves an ugly broken-image circle
   return name
-    ? `<img src="https://minotar.net/helm/${encodeURIComponent(name)}/64.png" alt="${name} avatar" loading="lazy">`
+    ? `<img src="${avatarUrl(name, 64)}" alt="${name} avatar" loading="lazy" onerror="this.onerror=null;this.src='/img/donut.svg'">`
     : `<img src="/img/donut.svg" alt="Anonymous player" loading="lazy">`;
 }
 function lbPodiumCard(u, rank) {
@@ -1938,7 +2022,7 @@ function lbPodiumCard(u, rank) {
   return `<div class="lb-card lb-p${rank}">
     <span class="lb-place">${place} place</span>
     <div class="lb-pfp">${lbAvatar(u.avatarName)}</div>
-    <b class="lb-name">${u.username}</b>
+    <b class="lb-name clickable-name" data-username="${u.username}">${u.username}</b>
     <div class="lb-wagered"><span>Total wagered</span><b>${fmt(u.wagered)}</b></div>
     <div class="lb-prize">Prize: ${fmt(LB_PRIZE[rank])}</div>
   </div>`;
@@ -1947,7 +2031,7 @@ function lbRow(u, rank) {
   return `<li class="lb-row">
     <span class="lb-rank">${rank}</span>
     <div class="lb-row-pfp">${lbAvatar(u.avatarName)}</div>
-    <span class="lb-row-name">${u.username}</span>
+    <span class="lb-row-name clickable-name" data-username="${u.username}">${u.username}</span>
     <span class="lb-row-wagered">${fmt(u.wagered)}</span>
   </li>`;
 }
@@ -2031,7 +2115,7 @@ async function renderRewards() {
     ms.innerHTML = lv.milestones.map(milestoneRow).join('');
     ms.querySelectorAll('[data-mlevel]').forEach((btn) => btn.onclick = async () => {
       try {
-        const r = await api('rewards/level', {});
+        const r = await api('rewards/level', { level: Number(btn.dataset.mlevel) });
         setBalance(r.balance); SND.coin(); toast(`Claimed +${fmt(r.amount)} coins`, true);
         renderRewards();
       } catch (e) { toast(e.message); }

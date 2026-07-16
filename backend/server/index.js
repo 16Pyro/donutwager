@@ -53,31 +53,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 // ---- helpers ---------------------------------------------------------------
 
 function requireAuth(req, res, next) {
-  if (!req.session.userId) return res.status(401).json({ error: 'not signed in' });
-  next();
-}
-
-// guests can play instantly: first bet quietly creates a Guest_xxxx account
-// tied to their session. Everything still settles server-side under a real user row.
-function makeGuest() {
-  for (; ;) {
-    const username = 'Guest_' + crypto.randomInt(1000, 999999);
-    if (stmts.getUserByName.get(username)) continue;
-    const serverSeed = fair.newServerSeed();
-    return stmts.createUser.run({
-      username,
-      passhash: bcrypt.hashSync(crypto.randomBytes(24).toString('hex'), 8),
-      balance: START_BALANCE,
-      created_at: Date.now(),
-      client_seed: crypto.randomBytes(8).toString('hex'),
-      server_seed: serverSeed,
-      server_seed_hash: fair.hashSeed(serverSeed),
-    }).lastInsertRowid;
-  }
-}
-
-function ensureUser(req, res, next) {
-  if (!req.session.userId) req.session.userId = makeGuest();
+  if (!req.session.userId) return res.status(401).json({ error: 'Link your Minecraft account to play' });
   next();
 }
 
@@ -112,7 +88,6 @@ function publicUser(u) {
     nonce: u.nonce,
     bonusReadyAt: u.last_bonus + BONUS_COOLDOWN,
     dailyReadyAt: u.last_daily + BONUS_COOLDOWN,
-    guest: u.username.startsWith('Guest_'),
     totalWagered: u.total_wagered / 100,
     mcUsername: u.mc_username || null,
     anonymous: !!u.anonymous,
@@ -184,7 +159,7 @@ app.get('/api/me', (req, res) => {
 
 // ---- wallet / meta -------------------------------------------------------------
 
-app.post('/api/bonus', ensureUser, (req, res) => {
+app.post('/api/bonus', requireAuth, (req, res) => {
   const u = stmts.getUserById.get(req.session.userId);
   const now = Date.now();
   if (now - u.last_bonus < BONUS_COOLDOWN) {
@@ -196,7 +171,7 @@ app.post('/api/bonus', ensureUser, (req, res) => {
 });
 
 // rotate seeds: reveal the old server seed so past bets can be verified
-app.post('/api/seeds/rotate', ensureUser, (req, res) => {
+app.post('/api/seeds/rotate', requireAuth, (req, res) => {
   const u = stmts.getUserById.get(req.session.userId);
   if (games.minesState(u.id) || games.towersState(u.id) || games.bjState(u.id) || games.chickenState(u.id)) {
     return res.status(400).json({ error: 'finish active games before rotating seeds' });
@@ -252,17 +227,17 @@ function battleRoute(fn) {
 app.get('/api/battles', battleRoute((req) => ({ battles: battles.list(req.session.userId) })));
 app.get('/api/battles/history', battleRoute((req) => ({ battles: battles.history(req.session.userId) })));
 app.get('/api/battles/:id', battleRoute((req) => ({ battle: battles.get(Number(req.params.id), req.session.userId) })));
-app.post('/api/battles/create', ensureUser, throttle, battleRoute((req) => battles.create(req.session.userId, req.body || {})));
-app.post('/api/battles/join', ensureUser, throttle, battleRoute((req) => ({ battle: battles.join(req.session.userId, Number((req.body || {}).id)) })));
-app.post('/api/battles/bots', ensureUser, throttle, battleRoute((req) => ({ battle: battles.callBots(req.session.userId, Number((req.body || {}).id)) })));
-app.post('/api/battles/addbot', ensureUser, throttle, battleRoute((req) => ({ battle: battles.addBot(req.session.userId, Number((req.body || {}).id)) })));
+app.post('/api/battles/create', requireAuth, throttle, battleRoute((req) => battles.create(req.session.userId, req.body || {})));
+app.post('/api/battles/join', requireAuth, throttle, battleRoute((req) => ({ battle: battles.join(req.session.userId, Number((req.body || {}).id)) })));
+app.post('/api/battles/bots', requireAuth, throttle, battleRoute((req) => ({ battle: battles.callBots(req.session.userId, Number((req.body || {}).id)) })));
+app.post('/api/battles/addbot', requireAuth, throttle, battleRoute((req) => ({ battle: battles.addBot(req.session.userId, Number((req.body || {}).id)) })));
 
-app.post('/api/chicken/start', ensureUser, throttle, gameRoute(games.chickenStart));
-app.post('/api/chicken/step', ensureUser, throttle, gameRoute(games.chickenStep));
-app.post('/api/chicken/cashout', ensureUser, throttle, gameRoute(games.chickenCashout));
+app.post('/api/chicken/start', requireAuth, throttle, gameRoute(games.chickenStart));
+app.post('/api/chicken/step', requireAuth, throttle, gameRoute(games.chickenStep));
+app.post('/api/chicken/cashout', requireAuth, throttle, gameRoute(games.chickenCashout));
 
 app.get('/api/cases', (req, res) => res.json({ cases: games.casesPublic() }));
-app.post('/api/cases/open', ensureUser, throttle, gameRoute(games.casesOpen));
+app.post('/api/cases/open', requireAuth, throttle, gameRoute(games.casesOpen));
 
 // ---- free daily case -------------------------------------------------------------
 
@@ -276,7 +251,7 @@ app.get('/api/daily', (req, res) => {
   res.json({ items, readyAt });
 });
 
-app.post('/api/daily/open', ensureUser, throttle, (req, res) => {
+app.post('/api/daily/open', requireAuth, throttle, (req, res) => {
   const u = stmts.getUserById.get(req.session.userId);
   const now = Date.now();
   if (now - u.last_daily < BONUS_COOLDOWN) {
@@ -297,7 +272,7 @@ app.get('/api/chat', (req, res) => {
   }));
   res.json({ messages });
 });
-app.post('/api/chat', ensureUser, (req, res) => {
+app.post('/api/chat', requireAuth, (req, res) => {
   const now = Date.now();
   if (now - (lastChat.get(req.session.userId) || 0) < 2000) {
     return res.status(429).json({ error: 'chill for a sec between messages' });
@@ -309,22 +284,22 @@ app.post('/api/chat', ensureUser, (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/dice', ensureUser, throttle, gameRoute(games.dice));
-app.post('/api/coinflip', ensureUser, throttle, gameRoute(games.coinflip));
-app.post('/api/mines/start', ensureUser, throttle, gameRoute(games.minesStart));
-app.post('/api/mines/reveal', ensureUser, throttle, gameRoute(games.minesReveal));
-app.post('/api/mines/cashout', ensureUser, throttle, gameRoute(games.minesCashout));
-app.post('/api/towers/start', ensureUser, throttle, gameRoute(games.towersStart));
-app.post('/api/towers/pick', ensureUser, throttle, gameRoute(games.towersPick));
-app.post('/api/towers/cashout', ensureUser, throttle, gameRoute(games.towersCashout));
-app.post('/api/blackjack/start', ensureUser, throttle, gameRoute(games.bjStart));
-app.post('/api/blackjack/hit', ensureUser, throttle, gameRoute(games.bjHit));
-app.post('/api/blackjack/stand', ensureUser, throttle, gameRoute(games.bjStand));
-app.post('/api/blackjack/double', ensureUser, throttle, gameRoute(games.bjDouble));
+app.post('/api/dice', requireAuth, throttle, gameRoute(games.dice));
+app.post('/api/coinflip', requireAuth, throttle, gameRoute(games.coinflip));
+app.post('/api/mines/start', requireAuth, throttle, gameRoute(games.minesStart));
+app.post('/api/mines/reveal', requireAuth, throttle, gameRoute(games.minesReveal));
+app.post('/api/mines/cashout', requireAuth, throttle, gameRoute(games.minesCashout));
+app.post('/api/towers/start', requireAuth, throttle, gameRoute(games.towersStart));
+app.post('/api/towers/pick', requireAuth, throttle, gameRoute(games.towersPick));
+app.post('/api/towers/cashout', requireAuth, throttle, gameRoute(games.towersCashout));
+app.post('/api/blackjack/start', requireAuth, throttle, gameRoute(games.bjStart));
+app.post('/api/blackjack/hit', requireAuth, throttle, gameRoute(games.bjHit));
+app.post('/api/blackjack/stand', requireAuth, throttle, gameRoute(games.bjStand));
+app.post('/api/blackjack/double', requireAuth, throttle, gameRoute(games.bjDouble));
 
 // ---- Minecraft linking -------------------------------------------------------
 
-app.get('/api/mc/bots', (req, res) => res.json({ bots: mcBot.BOT_NAMES }));
+app.get('/api/mc/bots', (req, res) => res.json({ bots: mcBot.BOT_NAMES, online: mcBot.isOnline() }));
 
 app.post('/api/mc/link/start', (req, res) => {
   const bots = mcBot.BOT_NAMES;
@@ -342,7 +317,9 @@ app.get('/api/mc/link/poll', (req, res) => {
   if (!token) return res.json({ status: 'no_token' });
   const row = stmts.getLinkTokenByToken.get(token);
   if (!row) return res.json({ status: 'expired' });
-  if (!row.user_id) return res.json({ status: 'pending' });
+  if (!row.user_id) {
+    return res.json({ status: 'pending', bot: row.bot_name, amount: row.amount, expiresAt: row.expires_at });
+  }
   req.session.userId = row.user_id;
   req.session.pendingLinkToken = null;
   stmts.deleteLinkToken.run(token);
@@ -365,6 +342,21 @@ app.post('/api/anonymous', requireAuth, (req, res) => {
 
 app.get('/api/rewards', requireAuth, (req, res) => {
   res.json(rewards.getRewards(req.session.userId));
+});
+
+// public profile lookup (chat/leaderboard "click a name" card) - no balance,
+// no deposit/withdraw history, nothing private. anonymous players resolve to
+// nothing since their displayed name is literally "Anonymous", not a real one.
+app.get('/api/user/:username', (req, res) => {
+  const u = stmts.getUserByName.get(req.params.username);
+  if (!u || u.anonymous) return res.status(404).json({ error: 'user not found' });
+  const level = rewards.getRewards(u.id).level;
+  res.json({
+    username: u.mc_username || u.username,
+    level: level.level,
+    totalWagered: u.total_wagered / 100,
+    createdAt: u.created_at,
+  });
 });
 
 app.get('/api/profile', requireAuth, (req, res) => {
@@ -397,7 +389,7 @@ app.post('/api/rewards/rakeback', requireAuth, throttle, (req, res) => {
 
 app.post('/api/rewards/level', requireAuth, throttle, (req, res) => {
   try {
-    res.json(rewards.claimLevelRewards(req.session.userId));
+    res.json(rewards.claimLevelRewards(req.session.userId, Number((req.body || {}).level)));
   } catch (e) {
     if (e instanceof rewards.RewardsError) return res.status(400).json({ error: e.message });
     console.error(e);
@@ -406,10 +398,13 @@ app.post('/api/rewards/level', requireAuth, throttle, (req, res) => {
 });
 
 app.post('/api/mc/withdraw', requireAuth, (req, res) => {
+  if (!mcBot.isOnline()) return res.status(503).json({ error: 'BOT IS CURRENTLY DOWN' });
   const u = stmts.getUserById.get(req.session.userId);
   if (!u.mc_username) return res.status(400).json({ error: 'Link your Minecraft account first' });
   const amount = Math.floor(Number((req.body || {}).amount) || 0);
   if (amount < 1) return res.status(400).json({ error: 'Enter a valid amount' });
+  const bank = mcBot.getBankBalance();
+  if (bank !== null && amount > bank) return res.status(503).json({ error: 'Withdraw is currently down' });
   const amountCents = amount * 100;
   const result = stmts.tryDeductPlain.run(amountCents, req.session.userId, amountCents);
   if (result.changes === 0) return res.status(400).json({ error: 'Not enough balance' });

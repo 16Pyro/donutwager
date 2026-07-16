@@ -26,6 +26,7 @@ class BattleError extends Error {}
 
 const SIZES = { '1v1': { seats: 2, teams: null }, '1v1v1': { seats: 3, teams: null }, '1v1v1v1': { seats: 4, teams: null }, '2v2': { seats: 4, teams: [[0, 1], [2, 3]] } };
 const MODES = ['standard', 'crazy', 'terminal', 'jackpot', 'degen'];
+const SPEEDS = ['normal', 'quick', 'instant'];
 const BOT_NAMES = ['bots'];
 
 function load(id) {
@@ -44,6 +45,7 @@ function publicBattle(id, st, full, viewerId) {
     id,
     status: st.status,
     mode: st.mode,
+    speed: st.speed || 'normal',
     size: st.size,
     lineup: st.lineup.map(l => ({ caseId: l.caseId, count: l.count, price: l.price / 100, cover: games.CASES[l.caseId].cover, name: games.CASES[l.caseId].name })),
     cost: entryCost(st.lineup) / 100,
@@ -66,6 +68,7 @@ function create(userId, body) {
   const user = stmts.getUserById.get(userId);
   const size = SIZES[body.size] ? body.size : '1v1';
   let mode = MODES.includes(body.mode) ? body.mode : 'standard';
+  const speed = SPEEDS.includes(body.speed) ? body.speed : 'normal';
 
   const MAX_TOTAL = 50, MAX_COUNT = 50;
   const rawLineup = Array.isArray(body.lineup) ? body.lineup.slice(0, MAX_TOTAL) : [];
@@ -85,7 +88,7 @@ function create(userId, body) {
 
   const seed = crypto.randomBytes(32).toString('hex');
   const st = {
-    status: 'open', size, mode, lineup, createdAt: Date.now(),
+    status: 'open', size, mode, speed, lineup, createdAt: Date.now(),
     seed, seedHash: crypto.createHash('sha256').update(seed).digest('hex'),
     players: [{ id: userId, name: user.username, bot: false }],
   };

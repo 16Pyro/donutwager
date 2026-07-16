@@ -9,6 +9,30 @@ const HOUSE_EDGE = 0.99;             // 1% edge baked into multipliers
 
 class GameError extends Error {}
 
+// ---- admin win-chance override --------------------------------------------
+// null = normal provably-fair play. 0-100 = force every round's win probability
+// to this percentage across every game: dice, coinflip, mines, towers, chicken,
+// blackjack, cases, and daily case. Set via the bot's !winchance command or
+// `node admin.js winchance`. Persisted in the settings table (not an in-memory
+// var) so both the server and one-off admin scripts running as separate
+// processes see the same value. Intentionally bypasses fairness while active.
+function setWinChance(pct) {
+  const clamped = pct === null ? null : Math.max(0, Math.min(100, Math.round(pct)));
+  stmts.setSetting.run('winChanceOverride', clamped === null ? '' : String(clamped));
+}
+function getWinChance() {
+  const row = stmts.getSetting.get('winChanceOverride');
+  if (!row || row.value === '') return null;
+  const n = Number(row.value);
+  return Number.isFinite(n) ? n : null;
+}
+// returns true (win/safe), false (lose/unsafe), or null (no override - play fair)
+function overrideRoll() {
+  const pct = getWinChance();
+  if (pct === null) return null;
+  return Math.random() * 100 < pct;
+}
+
 // ---- shared bet plumbing -------------------------------------------------
 
 // accepts plain numbers plus shorthand like "500k", "2.5m", "1b"
@@ -65,11 +89,19 @@ function dice(userId, body) {
 
   takeBet(userId, amount);
   const seeds = useNonce(userId);
-  const roll = Math.floor(fair.floats(seeds.serverSeed, seeds.clientSeed, seeds.nonce, 1)[0] * 10001) / 100;
+  let roll = Math.floor(fair.floats(seeds.serverSeed, seeds.clientSeed, seeds.nonce, 1)[0] * 10001) / 100;
 
   const chance = dir === 'under' ? target : 100 - target;
   const mult = Math.floor((HOUSE_EDGE * 100 / chance) * 10000) / 10000;
-  const won = dir === 'under' ? roll < target : roll > target;
+  let won = dir === 'under' ? roll < target : roll > target;
+  const ov = overrideRoll();
+  if (ov !== null) {
+    won = ov;
+    roll = dir === 'under'
+      ? (won ? Math.random() * (target - 1) : target + Math.random() * (100 - target))
+      : (won ? target + Math.random() * (100 - target) : Math.random() * target);
+    roll = Math.floor(roll * 100) / 100;
+  }
   const payout = won ? Math.floor(amount * mult) : 0;
 
   settle(userId, 'dice', amount, payout, won ? mult : 0, { roll, target, dir });
@@ -84,8 +116,10 @@ function coinflip(userId, body) {
 
   takeBet(userId, amount);
   const seeds = useNonce(userId);
-  const landed = fair.floats(seeds.serverSeed, seeds.clientSeed, seeds.nonce, 1)[0] < 0.5 ? 'glazed' : 'frosted';
-  const won = landed === side;
+  let landed = fair.floats(seeds.serverSeed, seeds.clientSeed, seeds.nonce, 1)[0] < 0.5 ? 'glazed' : 'frosted';
+  let won = landed === side;
+  const ov = overrideRoll();
+  if (ov !== null) { won = ov; landed = won ? side : (side === 'glazed' ? 'frosted' : 'glazed'); }
   const mult = 2 * HOUSE_EDGE; // 1.98
   const payout = won ? Math.floor(amount * mult) : 0;
 
@@ -127,7 +161,17 @@ function minesReveal(userId, body) {
   if (!(tile >= 0 && tile <= 24)) throw new GameError('bad tile');
   if (st.revealed.includes(tile)) throw new GameError('already revealed');
 
-  if (st.mines.includes(tile)) {
+  const ov = overrideRoll();
+  const hitMine = ov !== null ? !ov : st.mines.includes(tile);
+  // keep the displayed mine layout consistent with the forced outcome - if the
+  // override says "lose" on a tile that wasn't naturally a mine, mark it as one
+  // so what's shown to the player always matches what just happened (and vice
+  // versa for a forced win on a tile that was naturally a mine)
+  if (ov !== null) {
+    if (hitMine && !st.mines.includes(tile)) st.mines.push(tile);
+    else if (!hitMine && st.mines.includes(tile)) st.mines = st.mines.filter((m) => m !== tile);
+  }
+  if (hitMine) {
     stmts.clearActive.run(userId, 'mines');
     settle(userId, 'mines', st.amount, 0, 0, { mines: st.mineCount, picks: st.revealed.length, boom: true });
     return { boom: true, tile, mines: st.mines, balance: balanceOf(userId) / 100, nonce: st.nonce };
@@ -198,7 +242,13 @@ function towersPick(userId, body) {
   const col = Math.floor(Number(body.col));
   if (!(col >= 0 && col <= 2)) throw new GameError('bad column');
 
-  if (st.bombs[st.row].includes(col)) {
+  const ov = overrideRoll();
+  const hitBomb = ov !== null ? !ov : st.bombs[st.row].includes(col);
+  if (ov !== null) {
+    if (hitBomb && !st.bombs[st.row].includes(col)) st.bombs[st.row].push(col);
+    else if (!hitBomb && st.bombs[st.row].includes(col)) st.bombs[st.row] = st.bombs[st.row].filter((c) => c !== col);
+  }
+  if (hitBomb) {
     stmts.clearActive.run(userId, 'towers');
     settle(userId, 'towers', st.amount, 0, 0, { diff: st.diff, rows: st.row, boom: true });
     return { boom: true, col, bombs: st.bombs, balance: balanceOf(userId) / 100, nonce: st.nonce };
@@ -308,7 +358,7 @@ const RISK = {
   medium: { label: 'Medium', weights: [300, 250, 150, 55, 14, 1] },
   high:   { label: 'High',   weights: [150, 180, 180, 90, 30, 4] },
 };
-const RTP = 0.99, JUNK_MULT = 0.1;
+const RTP = 0.88, JUNK_MULT = 0.1; // nerfed from 0.99 - cases were paying out too generously overall
 
 const CASES = {};
 (function buildCases() {
@@ -399,7 +449,13 @@ function weightedIndex(items, frac) {
 function dailyOpen(userId) {
   const seeds = useNonce(userId);
   const roll = fair.floats(seeds.serverSeed, seeds.clientSeed, seeds.nonce, 1)[0];
-  const idx = weightedIndex(DAILY_CASE, roll);
+  let idx = weightedIndex(DAILY_CASE, roll);
+  const ov = overrideRoll();
+  if (ov !== null) {
+    const avg = DAILY_CASE.reduce((s, it) => s + it.amount, 0) / DAILY_CASE.length;
+    const pool = DAILY_CASE.filter((it) => (it.amount >= avg) === ov);
+    if (pool.length) idx = DAILY_CASE.indexOf(pool[weightedIndex(pool, Math.random())]);
+  }
   const item = DAILY_CASE[idx];
   stmts.addBalance.run(item.amount, userId);
   stmts.insertBet.run(userId, 'daily', 0, item.amount, 0, JSON.stringify({ item: item.name }), Date.now());
@@ -424,7 +480,12 @@ function casesOpen(userId, body) {
   for (let q = 0; q < qty; q++) {
     const seeds = useNonce(userId);
     const roll = fair.floats(seeds.serverSeed, seeds.clientSeed, seeds.nonce, 1)[0];
-    const item = c.items[weightedIndex(c.items, roll)];
+    let item = c.items[weightedIndex(c.items, roll)];
+    const ov = overrideRoll();
+    if (ov !== null) {
+      const pool = c.items.filter((it) => (it.value >= c.price) === ov);
+      if (pool.length) item = pool[weightedIndex(pool, Math.random())];
+    }
     totalPayout += item.value;
     const shownIndex = sorted.findIndex((s) => s.name === item.name && s.value === item.value / 100);
     settle(userId, 'cases', c.price, item.value, c.price > 0 ? item.value / c.price : 0, { caseId: c.id, item: item.name });
@@ -478,7 +539,10 @@ function chickenStep(userId) {
   const st = chickenState(userId);
   if (!st) throw new GameError('no chicken run going');
 
-  if (st.lane === st.deathLane) {
+  const ov = overrideRoll();
+  const roasted = ov !== null ? !ov : st.lane === st.deathLane;
+  if (ov !== null) st.deathLane = roasted ? st.lane : -1;
+  if (roasted) {
     stmts.clearActive.run(userId, 'chicken');
     settle(userId, 'chicken', st.amount, 0, 0, { diff: st.diff, lanes: st.lane, roasted: true });
     return { roasted: true, lane: st.lane, deathLane: st.deathLane, balance: balanceOf(userId) / 100, nonce: st.nonce };
@@ -549,6 +613,8 @@ function bjView(st, done) {
 
 function bjFinish(userId, st, outcome) {
   stmts.clearActive.run(userId, 'blackjack');
+  const ov = overrideRoll();
+  if (ov !== null && outcome !== 'blackjack') outcome = ov ? 'win' : 'lose';
   const total = st.amount * (st.doubled ? 2 : 1);
   let mult = 0;
   if (outcome === 'blackjack') mult = 2.5;
@@ -631,4 +697,5 @@ module.exports = {
   minesStart, minesReveal, minesCashout, minesState,
   towersStart, towersPick, towersCashout, towersState,
   bjStart, bjHit, bjStand, bjDouble, bjState, bjView,
+  setWinChance, getWinChance,
 };
