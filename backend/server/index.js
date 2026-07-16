@@ -348,7 +348,8 @@ app.get('/api/rewards', requireAuth, (req, res) => {
 // no deposit/withdraw history, nothing private. anonymous players resolve to
 // nothing since their displayed name is literally "Anonymous", not a real one.
 app.get('/api/user/:username', (req, res) => {
-  const u = stmts.getUserByName.get(req.params.username);
+  // chat and the live feed display mc_username, so try that first
+  const u = stmts.getUserByMc.get(req.params.username) || stmts.getUserByName.get(req.params.username);
   if (!u || u.anonymous) return res.status(404).json({ error: 'user not found' });
   const level = rewards.getRewards(u.id).level;
   res.json({
@@ -356,6 +357,13 @@ app.get('/api/user/:username', (req, res) => {
     level: level.level,
     totalWagered: u.total_wagered / 100,
     createdAt: u.created_at,
+    // recent bets are already broadcast publicly on the live feed for
+    // non-anonymous players, so this exposes nothing new. balance and
+    // deposit/withdraw history stay private.
+    recentBets: stmts.myBets.all(u.id).map(b => ({
+      game: b.game, amount: b.amount / 100, payout: b.payout / 100,
+      multiplier: b.multiplier, created_at: b.created_at,
+    })),
   });
 });
 

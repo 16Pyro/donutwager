@@ -114,6 +114,11 @@
           <a class="btn btn-green btn-big" href="#/cases">Open a case</a>
           <a class="btn btn-ghost btn-big" href="#/fair">How fairness works</a>
         </div>
+        <div class="hero-badges">
+          <span class="hero-badge"><img class="pix" src="/img/items/emerald.png" alt="">Provably fair</span>
+          <span class="hero-badge"><img class="pix" src="/img/items/gold_ingot.png" alt="">Instant deposits</span>
+          <span class="hero-badge"><img class="pix" src="/img/items/ender_pearl.png" alt="">Withdraw anytime</span>
+        </div>
       </div>
       <div class="hero-donut">
         <img src="/img/donut.svg" alt="Donut SMP gambling platform token" class="floaty">
@@ -152,6 +157,28 @@
         <div class="game-art art-chicken"><img class="pix" src="/img/items/chicken.png" alt="Chicken game icon"></div>
         <div class="game-info"><strong>Chicken</strong><span>cross the lava, don't fry</span></div>
       </a>
+    </div>
+
+    <h2 class="section-title">How it works</h2>
+    <div class="howit-grid">
+      <div class="howit-step">
+        <span class="howit-num">1</span>
+        <img class="pix" src="/img/items/compass.png" alt="">
+        <b>Pay the bot</b>
+        <span>Run <code>/pay AALV1N &lt;amount&gt;</code> on donutsmp.net. Your username becomes your account — no signup, no password.</span>
+      </div>
+      <div class="howit-step">
+        <span class="howit-num">2</span>
+        <img class="pix" src="/img/items/tnt.png" alt="">
+        <b>Play</b>
+        <span>Seven games, all provably fair and settled server-side. Verify any roll yourself after the fact.</span>
+      </div>
+      <div class="howit-step">
+        <span class="howit-num">3</span>
+        <img class="pix" src="/img/items/gold_block.png" alt="">
+        <b>Cash out</b>
+        <span>Withdraw straight back to your Minecraft account, any time, paid by the bot in-game.</span>
+      </div>
     </div>
 
     <div class="home-cols">
@@ -709,7 +736,7 @@
     <button class="btn btn-green btn-block" id="withdraw-go-btn">Withdraw</button>
   </div>
 
-  <div class="modal hidden" id="modal-userprofile">
+  <div class="modal modal-wide hidden" id="modal-userprofile">
     <div class="up-banner">
       <div class="up-avatar-wrap">
         <img id="up-avatar" src="" alt="" onerror="this.onerror=null;this.src='/img/donut.svg'">
@@ -717,8 +744,13 @@
       <h3 id="up-name"></h3>
       <span class="up-level-pill" id="up-level"></span>
     </div>
-    <div class="up-stats">
-      <div class="up-stat"><span>Total Wagered</span><b class="coin" id="up-wagered"></b></div>
+    <div class="stats-cards" id="up-cards"></div>
+    <h3 class="history-head" id="up-bets-head">Recent bets</h3>
+    <div class="up-table-wrap">
+      <table class="feed-table" id="up-bets-table">
+        <thead><tr><th>Game</th><th>Amount</th><th>Multiplier</th><th>Payout</th><th>Time</th></tr></thead>
+        <tbody></tbody>
+      </table>
     </div>
     <p class="hint" id="up-notfound" style="display:none">This player hasn't linked an account.</p>
   </div>

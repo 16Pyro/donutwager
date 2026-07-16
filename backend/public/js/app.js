@@ -11,10 +11,11 @@ const HIDDEN_NAME = 'Anonymous';
 
 // Bedrock (Xbox/mobile/etc) usernames on Java-bridged servers are conventionally
 // prefixed with "." and aren't real Java accounts, so minotar can't resolve a
-// real skin for them - give them the default Steve head instead of a broken lookup
+// real skin for them - use the local Alex skin instead of a broken lookup
 function avatarUrl(name, size) {
   const isBedrock = typeof name === 'string' && name.startsWith('.');
-  return `https://minotar.net/helm/${isBedrock ? 'char' : encodeURIComponent(name || '')}/${size}.png`;
+  if (isBedrock) return '/img/alex.png';
+  return `https://minotar.net/helm/${encodeURIComponent(name || '')}/${size}.png`;
 }
 
 // ---------- tiny api helper ----------
@@ -229,14 +230,34 @@ async function openUserProfile(username) {
   showModal('userprofile');
   $('#up-name').textContent = username;
   $('#up-avatar').src = avatarUrl(username, 64);
-  $('#up-level').textContent = '';
-  $('#up-wagered').textContent = '';
+  $('#up-level').textContent = ' '; // keep the pill's height so it doesn't pop in later
   $('#up-notfound').style.display = 'none';
+  // skeleton placeholders at the real final layout/size, so the modal never
+  // visibly resizes once the fetch resolves - only the numbers change
+  $('#up-cards').innerHTML = `
+    <div class="stat-card skeleton"><span>Total wagered</span><b>&nbsp;</b></div>
+    <div class="stat-card skeleton"><span>Level</span><b>&nbsp;</b></div>
+    <div class="stat-card skeleton"><span>Member since</span><b>&nbsp;</b></div>
+  `;
+  $('#up-bets-head').style.display = '';
+  $('#up-bets-table tbody').innerHTML = '<tr><td colspan="5" class="stage-msg">Loading…</td></tr>';
   try {
     const u = await api('user/' + encodeURIComponent(username));
     $('#up-name').textContent = u.username;
     $('#up-level').textContent = `Level ${u.level}`;
-    $('#up-wagered').textContent = fmt(u.totalWagered);
+    // same stat-card layout as the own-stats page, public fields only
+    const joined = u.createdAt
+      ? new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+      : '—';
+    $('#up-cards').innerHTML = `
+      <div class="stat-card"><span>Total wagered</span><b class="coin">${fmt(u.totalWagered)}</b></div>
+      <div class="stat-card"><span>Level</span><b>${u.level}</b></div>
+      <div class="stat-card"><span>Member since</span><b>${joined}</b></div>
+    `;
+    $('#up-bets-head').style.display = '';
+    $('#up-bets-table tbody').innerHTML = (u.recentBets && u.recentBets.length)
+      ? u.recentBets.map(statsBetRow).join('')
+      : '<tr><td colspan="5" class="stage-msg">No bets yet.</td></tr>';
   } catch {
     $('#up-notfound').style.display = '';
   }
@@ -2035,21 +2056,28 @@ function lbRow(u, rank) {
     <span class="lb-row-wagered">${fmt(u.wagered)}</span>
   </li>`;
 }
+function paintLeaderboard(top) {
+  const podium = $('#lb-podium'), list = $('#lb-list');
+  if (!top.length) {
+    podium.innerHTML = '';
+    list.innerHTML = '<li class="lb-empty">Nobody has wagered yet — be the first degenerate.</li>';
+    return;
+  }
+  // podium order: 2nd, 1st, 3rd (matches the classic centered-1st layout)
+  const [p1, p2, p3] = [top[0], top[1], top[2]];
+  podium.innerHTML = [p2 && lbPodiumCard(p2, 2), p1 && lbPodiumCard(p1, 1), p3 && lbPodiumCard(p3, 3)]
+    .filter(Boolean).join('');
+  list.innerHTML = top.slice(3).map((u, i) => lbRow(u, i + 4)).join('');
+}
+let lbCache = null; // last-rendered leaderboard - paint instantly from this, then revalidate
 async function renderLeaderboard() {
   const podium = $('#lb-podium'), list = $('#lb-list');
   if (!podium || !list) return;
+  if (lbCache) paintLeaderboard(lbCache); // avoid the blank-then-pop-in flash on every visit
   try {
     const { top } = await api('leaderboard/full');
-    if (!top.length) {
-      podium.innerHTML = '';
-      list.innerHTML = '<li class="lb-empty">Nobody has wagered yet — be the first degenerate.</li>';
-      return;
-    }
-    // podium order: 2nd, 1st, 3rd (matches the classic centered-1st layout)
-    const [p1, p2, p3] = [top[0], top[1], top[2]];
-    podium.innerHTML = [p2 && lbPodiumCard(p2, 2), p1 && lbPodiumCard(p1, 1), p3 && lbPodiumCard(p3, 3)]
-      .filter(Boolean).join('');
-    list.innerHTML = top.slice(3).map((u, i) => lbRow(u, i + 4)).join('');
+    lbCache = top;
+    paintLeaderboard(top);
   } catch {}
 }
 

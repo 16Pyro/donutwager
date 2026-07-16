@@ -407,14 +407,14 @@ const CASES = {};
 const CASE_LIST = Object.values(CASES);
 const totalWeight = (items) => items.reduce((s, it) => s + it.weight, 0);
 
-// free daily case — max 10M coins (1_000_000_000 cents)
+// free daily case — max 5M coins (500_000_000 cents)
 const DAILY_CASE = [
-  { name: 'XP Bottle',      icon: 'experience_bottle', amount:  10_000_000, weight: 350, rarity: 'common' },
-  { name: 'Golden Carrot',  icon: 'golden_carrot',     amount:  30_000_000, weight: 250, rarity: 'common' },
-  { name: 'Amethyst Shard', icon: 'amethyst_shard',    amount:  80_000_000, weight: 160, rarity: 'uncommon' },
-  { name: 'Emerald',        icon: 'emerald',           amount: 200_000_000, weight: 90,  rarity: 'rare' },
-  { name: 'Diamond',        icon: 'diamond',           amount: 500_000_000, weight: 35,  rarity: 'epic' },
-  { name: 'Nether Star',    icon: 'nether_star',       amount:1_000_000_000,weight: 8,   rarity: 'legendary' },
+  { name: 'XP Bottle',      icon: 'experience_bottle', amount:   5_000_000, weight: 350, rarity: 'common' },
+  { name: 'Golden Carrot',  icon: 'golden_carrot',     amount:  15_000_000, weight: 250, rarity: 'common' },
+  { name: 'Amethyst Shard', icon: 'amethyst_shard',    amount:  40_000_000, weight: 160, rarity: 'uncommon' },
+  { name: 'Emerald',        icon: 'emerald',           amount: 100_000_000, weight: 90,  rarity: 'rare' },
+  { name: 'Diamond',        icon: 'diamond',           amount: 250_000_000, weight: 35,  rarity: 'epic' },
+  { name: 'Nether Star',    icon: 'nether_star',       amount: 500_000_000, weight: 8,   rarity: 'legendary' },
 ];
 
 function casePublic(c) {

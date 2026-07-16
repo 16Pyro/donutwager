@@ -164,8 +164,10 @@ main { flex: 1; width: 100%; max-width: 1080px; margin: 0 auto; padding: 24px 22
 /* ---------- hero ---------- */
 .hero {
   display: flex; align-items: center; gap: 32px;
-  background: linear-gradient(160deg, var(--bg-2), #1e2b18);
-  padding: 40px 38px; margin-bottom: 36px; position: relative;
+  background:
+    radial-gradient(90% 130% at 85% 20%, #4c8f2a22, transparent 60%),
+    linear-gradient(160deg, var(--bg-2), #1e2b18);
+  padding: 44px 38px; margin-bottom: 36px; position: relative; overflow: hidden;
 }
 /* grass strip on top of the hero, like the top of a grass block */
 .hero::before {
@@ -177,6 +179,12 @@ main { flex: 1; width: 100%; max-width: 1080px; margin: 0 auto; padding: 24px 22
 .hero h1 { font-size: 30px; margin: 0 0 16px; line-height: 1.35; text-shadow: 3px 3px 0 #0008; }
 .hero-sub { color: var(--muted); font-size: 21px; max-width: 460px; margin: 0; }
 .hero-actions { display: flex; gap: 12px; margin-top: 26px; flex-wrap: wrap; }
+.hero-badges { display: flex; gap: 18px; margin-top: 22px; flex-wrap: wrap; }
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: var(--pixel); font-size: 8px; color: var(--muted); text-transform: uppercase;
+}
+.hero-badge .pix { width: 16px; height: 16px; }
 .hero-donut { position: relative; width: 190px; flex-shrink: 0; }
 .hero-donut img { width: 100%; filter: drop-shadow(0 14px 0 #0006); }
 .floaty { animation: floaty 4s steps(8) infinite; }
@@ -194,9 +202,16 @@ main { flex: 1; width: 100%; max-width: 1080px; margin: 0 auto; padding: 24px 22
   background: var(--bg-2); border: 2px solid var(--line);
   box-shadow: inset 2px 2px 0 var(--edge-light), inset -2px -2px 0 var(--edge-dark);
   text-decoration: none; color: var(--text);
+  transition: transform .12s steps(3), border-color .12s;
 }
+.game-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--green-lo);
+  box-shadow: inset 2px 2px 0 var(--edge-light), inset -2px -2px 0 var(--edge-dark), 0 6px 0 #0006;
+}
+.game-card:hover .pix { transform: scale(1.18); }
 .game-art { height: 96px; display: flex; align-items: center; justify-content: center; border-bottom: 2px solid var(--line); }
-.game-art .pix { width: 48px; height: 48px; }
+.game-art .pix { width: 48px; height: 48px; transition: transform .12s steps(3); filter: drop-shadow(3px 4px 0 #0007); }
 .art-cases  { background: #2b2317; }
 .art-mines  { background: #2e1c18; }
 .art-towers { background: #22242c; }
@@ -207,6 +222,22 @@ main { flex: 1; width: 100%; max-width: 1080px; margin: 0 auto; padding: 24px 22
 .game-info { padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
 .game-info strong { font-family: var(--pixel); font-size: 10px; }
 .game-info span { color: var(--muted); font-size: 16px; }
+
+/* ---------- how it works ---------- */
+.howit-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 36px; }
+.howit-step {
+  position: relative; background: var(--bg-2); border: 2px solid var(--line);
+  box-shadow: inset 2px 2px 0 var(--edge-light), inset -2px -2px 0 var(--edge-dark);
+  padding: 20px 18px 18px; display: flex; flex-direction: column; gap: 8px;
+}
+.howit-num {
+  position: absolute; top: 10px; right: 12px;
+  font-family: var(--pixel); font-size: 14px; color: var(--line);
+}
+.howit-step .pix { width: 34px; height: 34px; filter: drop-shadow(2px 3px 0 #0007); }
+.howit-step b { font-family: var(--pixel); font-size: 10px; margin-top: 2px; }
+.howit-step > span:not(.howit-num) { color: var(--muted); font-size: 16px; line-height: 1.55; }
+.howit-step code { font-family: var(--pixel); font-size: 10px; color: var(--gold); background: var(--bg); padding: 1px 5px; }
 
 /* ---------- panels / home cols ---------- */
 .home-cols { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
@@ -785,13 +816,22 @@ body.chat-closed .chat { display: none; }
   font-family: var(--pixel); font-size: 8px; color: #10230a; background: var(--green);
   padding: 5px 10px; box-shadow: inset 2px 2px 0 var(--green-hi), inset -2px -2px 0 var(--green-lo);
 }
-.up-stats { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 16px; }
-.up-stat {
-  background: var(--bg-2); border: 2px solid var(--line); padding: 12px 14px;
-  display: flex; flex-direction: column; gap: 6px;
+/* wider variant so the profile modal can fit the same stat-cards + bets
+   table the stats page uses (same specificity trick as .picker-modal) */
+.modal.modal-wide { width: 92vw; max-width: 640px; max-height: 86vh; overflow-y: hidden; display: flex; flex-direction: column; }
+.modal-wide .stats-cards { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); margin-bottom: 0; flex-shrink: 0; }
+.modal-wide .up-banner, .modal-wide #up-bets-head { flex-shrink: 0; }
+.up-table-wrap {
+  overflow-x: auto; overflow-y: auto; max-height: 260px;
+  scrollbar-width: thin; scrollbar-color: var(--bg-4) var(--bg-2);
 }
-.up-stat span { font-size: 11px; text-transform: uppercase; color: var(--muted); font-family: var(--pixel); }
-.up-stat b { font-size: 19px; }
+.up-table-wrap::-webkit-scrollbar { width: 8px; }
+.up-table-wrap::-webkit-scrollbar-track { background: var(--bg-2); }
+.up-table-wrap::-webkit-scrollbar-thumb { background: var(--bg-4); border: 1px solid var(--line); }
+.up-table-wrap::-webkit-scrollbar-thumb:hover { background: var(--edge-light); }
+.up-table-wrap .feed-table { min-width: 420px; }
+.stat-card.skeleton { opacity: .45; }
+.up-table-wrap thead th { position: sticky; top: 0; background: var(--bg-2); z-index: 1; }
 
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translate(-50%, 80px);
