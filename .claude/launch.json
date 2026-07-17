@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "donutwager-web",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "set MC_HOST=localhost&& set PORT=3100&& cd backend && node server/index.js"],
+      "port": 3100
+    }
+  ]
+}

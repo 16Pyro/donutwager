@@ -39,11 +39,38 @@ function entryCost(lineup) {
   return lineup.reduce((s, l) => s + l.price * l.count, 0);
 }
 
+// how long the client-side reveal animation actually takes for this battle,
+// so a battle doesn't drop out of the "active" list or appear in "previous
+// battles" (full result, spoiling who won) before anyone watching could have
+// actually seen the reveal finish. Mirrors the timing constants in
+// animateBattle() client-side - keep these in sync if those ever change.
+function revealDurationMs(st) {
+  const speed = st.speed || 'normal';
+  if (speed === 'instant') return 500; // still needs a beat for the UI to settle
+  const rounds = st.lineup.reduce((s, l) => s + l.count, 0);
+  const spinDur = speed === 'quick' ? 1500 : 2700;
+  const perRound = spinDur + 800;
+  const introWait = 3000;
+  const jackpotDur = st.mode === 'jackpot' ? 4200 : 0;
+  return introWait + rounds * perRound + jackpotDur + 2000; // +2s safety margin
+}
+function isRevealing(st) {
+  return st.status === 'done' && st.result && (Date.now() - st.result.resolvedAt) < revealDurationMs(st);
+}
+
 function publicBattle(id, st, full, viewerId) {
   const youSeat = viewerId ? st.players.findIndex(p => p.id === viewerId) : -1;
   const out = {
     id,
+    // lets every client compute "elapsed since resolvedAt" against the
+    // SERVER's clock instead of its own - two players' devices can have
+    // real clock skew (seconds, sometimes more), which otherwise desyncs
+    // the intro-wait timing badly: one client thinks the reveal already
+    // happened ages ago and skips straight to it, the other still waits
+    // out the full delay. See animateBattle() client-side for the math.
+    serverNow: Date.now(),
     status: st.status,
+    revealing: isRevealing(st),
     mode: st.mode,
     speed: st.speed || 'normal',
     size: st.size,
@@ -55,6 +82,9 @@ function publicBattle(id, st, full, viewerId) {
     youAreCreator: !!viewerId && st.players[0] && st.players[0].id === viewerId,
     youSeat,
   };
+  // resolvedAt alone (no pulls/winners/totals) lets the lobby estimate round
+  // progress ("5/50") for a revealing battle without spoiling the outcome
+  if (out.revealing) out.resolvedAt = st.result.resolvedAt;
   if (full && st.result) {
     out.result = st.result;
     out.fair = { serverSeed: st.seed, serverSeedHash: st.seedHash };
@@ -66,15 +96,23 @@ function publicBattle(id, st, full, viewerId) {
 
 function create(userId, body) {
   const user = stmts.getUserById.get(userId);
-  const size = SIZES[body.size] ? body.size : '1v1';
+  // Object.hasOwn, not `SIZES[x]` truthiness - see casesOpen()/chickenStart()
+  // in games.js for why a plain-object lookup on unsanitized client input is
+  // exploitable (body.size="constructor" etc. resolves through
+  // Object.prototype to a truthy non-SIZES value).
+  const size = Object.hasOwn(SIZES, body.size) ? body.size : '1v1';
   let mode = MODES.includes(body.mode) ? body.mode : 'standard';
   const speed = SPEEDS.includes(body.speed) ? body.speed : 'normal';
 
-  const MAX_TOTAL = 50, MAX_COUNT = 50;
+  const MAX_TOTAL = 200, MAX_COUNT = 200;
   const rawLineup = Array.isArray(body.lineup) ? body.lineup.slice(0, MAX_TOTAL) : [];
   if (!rawLineup.length) throw new BattleError('add at least one case');
   const lineup = rawLineup.map(l => {
-    const c = games.CASES[l.caseId];
+    // same Object.hasOwn guard - an unvalidated caseId here would otherwise
+    // corrupt every other player's entry cost when the battle resolves
+    // (pullFor() reads games.CASES[caseId].items, which throws on undefined),
+    // losing their money with no winner determined and no refund.
+    const c = Object.hasOwn(games.CASES, l.caseId) ? games.CASES[l.caseId] : null;
     if (!c) throw new BattleError('unknown case in lineup');
     const count = Math.floor(Number(l.count));
     if (!(count >= 1 && count <= MAX_COUNT)) throw new BattleError(`case count must be 1-${MAX_COUNT}`);
@@ -221,14 +259,29 @@ function resolve(id, st) {
   bstmts.update.run('done', JSON.stringify(st), id);
 }
 
+// battles that just resolved stay in the "active" list until their reveal
+// animation would have finished (see revealDurationMs) - otherwise a battle
+// you're mid-animation on vanishes from "active" and jumps straight to
+// "previous battles" (full result, spoiling who won) before you've actually
+// watched it happen. `full: false` here on purpose - the list view never
+// includes st.result, so nobody can read the outcome off the lobby early.
 function list(viewerId) {
-  return bstmts.open.all().map(r => publicBattle(r.id, JSON.parse(r.state), false, viewerId));
+  const open = bstmts.open.all().map(r => publicBattle(r.id, JSON.parse(r.state), false, viewerId));
+  const revealing = bstmts.recentDone.all()
+    .map(r => ({ id: r.id, st: JSON.parse(r.state) }))
+    .filter(({ st }) => isRevealing(st))
+    .map(({ id, st }) => publicBattle(id, st, false, viewerId));
+  return [...open, ...revealing];
 }
 
-// recent finished battles (with results) for the "previous battles" list
+// recent finished battles (with results) for the "previous battles" list -
+// held back until the reveal window has passed, so it can't spoil a battle
+// that's still (or might still be) mid-animation for someone watching it
 function history(viewerId) {
   return bstmts.recentDone.all()
-    .map(r => publicBattle(r.id, JSON.parse(r.state), true, viewerId))
+    .map(r => ({ id: r.id, st: JSON.parse(r.state) }))
+    .filter(({ st }) => !isRevealing(st))
+    .map(({ id, st }) => publicBattle(id, st, true, viewerId))
     .filter(b => b.result);
 }
 

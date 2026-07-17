@@ -54,9 +54,21 @@ function parseAmount(raw) {
   return cents;
 }
 
+// referrals: whoever referred this player earns a small slice of every wager
+// they place, forever - not a one-time bonus. Same rate as instant rakeback
+// (0.1%) so it reads as consistent with the rest of the site's economy.
+const REFERRAL_RATE = 0.001;
+function creditReferral(userId, wagerCents) {
+  const u = stmts.getUserById.get(userId);
+  if (!u.referred_by) return;
+  const cut = Math.floor(wagerCents * REFERRAL_RATE);
+  if (cut > 0) stmts.creditReferral.run(cut, cut, u.referred_by);
+}
+
 function takeBet(userId, cents) {
-  const r = stmts.tryDeduct.run(cents, cents, userId, cents);
+  const r = stmts.tryDeduct.run(cents, cents, cents, userId, cents);
   if (r.changes === 0) throw new GameError('insufficient balance');
+  creditReferral(userId, cents);
 }
 
 function refund(userId, cents) {
@@ -346,19 +358,23 @@ const CASE_SUFFIX = ['Case', 'Crate', 'Stash', 'Hoard', 'Vault', 'Trove', 'Box',
 
 const LADDER = [
   { rarity: 'junk',      mult: 0.1 },
-  { rarity: 'common',    mult: 0.4 },
-  { rarity: 'uncommon',  mult: 0.9 },
-  { rarity: 'rare',      mult: 1.8 },
-  { rarity: 'epic',      mult: 4 },
-  { rarity: 'legendary', mult: 12 },
-  { rarity: 'hero',      mult: 50 },
+  { rarity: 'common',    mult: 0.35 },
+  { rarity: 'uncommon',  mult: 0.7 },
+  { rarity: 'rare',      mult: 1.2 },
+  { rarity: 'epic',      mult: 2.5 },
+  { rarity: 'legendary', mult: 6 },
+  { rarity: 'hero',      mult: 20 },
 ];
 const RISK = {
   low:    { label: 'Low',    weights: [380, 260, 120, 30, 6, 0.4] },
   medium: { label: 'Medium', weights: [300, 250, 150, 55, 14, 1] },
   high:   { label: 'High',   weights: [150, 180, 180, 90, 30, 4] },
 };
-const RTP = 0.88, JUNK_MULT = 0.1; // nerfed from 0.99 - cases were paying out too generously overall
+// nerf pass #2: RTP dropped 0.88 -> 0.80 and every above-junk multiplier cut
+// (hero jackpot 50x -> 20x, legendary 12x -> 6x, epic 4x -> 2.5x, rare 1.8x ->
+// 1.2x, uncommon 0.9x -> 0.7x, common 0.4x -> 0.35x) - players were winning
+// too much both on average and on jackpot hits. Daily case is untouched.
+const RTP = 0.80, JUNK_MULT = 0.1;
 
 const CASES = {};
 (function buildCases() {
@@ -468,7 +484,13 @@ function dailyOpen(userId) {
 }
 
 function casesOpen(userId, body) {
-  const c = CASES[body.caseId];
+  // Object.hasOwn, not just `CASES[x]` truthiness - a plain object's lookup
+  // falls through to Object.prototype for keys like "constructor" or
+  // "toString", which resolves to a real (truthy) function/object. That
+  // passed the old `if (!c)` check, then every downstream `c.price` /
+  // `c.items` read undefined -> NaN, corrupting the bet and (via takeBet)
+  // the user's own balance column to NaN.
+  const c = Object.hasOwn(CASES, body.caseId) ? CASES[body.caseId] : null;
   if (!c) throw new GameError('unknown case');
   const qty = Math.min(5, Math.max(1, Math.floor(Number(body.qty) || 1)));
 
@@ -520,7 +542,14 @@ function chickenState(userId) {
 function chickenStart(userId, body) {
   if (chickenState(userId)) throw new GameError('your chicken is still out there');
   const amount = parseAmount(body.amount);
-  const diff = CHICKEN_DIFF[body.diff] ? body.diff : 'easy';
+  // Object.hasOwn guard - `CHICKEN_DIFF[body.diff]` for body.diff="constructor"
+  // (or "__proto__"/"toString"/etc.) resolves through Object.prototype to a
+  // real truthy value, so `diff` became that literal string. Every later
+  // `CHICKEN_DIFF[diff]` read then returned undefined -> NaN, and
+  // `rolls[i] >= NaN` is always false, so deathLane never got set: the
+  // chicken could never die, guaranteeing a win on every lane regardless of
+  // the actual provably-fair roll.
+  const diff = Object.hasOwn(CHICKEN_DIFF, body.diff) ? body.diff : 'easy';
 
   takeBet(userId, amount);
   const seeds = useNonce(userId);
@@ -698,4 +727,5 @@ module.exports = {
   towersStart, towersPick, towersCashout, towersState,
   bjStart, bjHit, bjStand, bjDouble, bjState, bjView,
   setWinChance, getWinChance,
+  REFERRAL_RATE,
 };
