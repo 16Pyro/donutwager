@@ -57,6 +57,15 @@ function fmt(n) {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// exact balance for the "Max" button - fmt() abbreviates to K/M/B and rounds
+// to 2 decimals *within that unit* (e.g. 6,756,338.49 -> "6.76M"), which
+// parseAmt() then reads back as 6,760,000 - MORE than the real balance,
+// so a max bet was rejected as insufficient. Round down to whole coins
+// (bets don't use fractional coins) so this can never overshoot.
+function exactAmt(n) {
+  return String(Math.floor(Number(n) || 0));
+}
+
 // "1.5b" / "500K" / "1,000" -> number of coins (NaN if garbage)
 function parseAmt(str) {
   const m = String(str).trim().replace(/,/g, '').match(/^([\d.]+)\s*([kmb]?)$/i);
@@ -72,12 +81,35 @@ function toast(msg, gold) {
   t._h = setTimeout(() => t.classList.remove('show'), 2600);
 }
 
-function setBalance(b) {
+// pulse defaults OFF - every single bet action (a mines tile, a blackjack hit,
+// a dice roll...) used to call setBalance() and jump-scale the wallet number
+// every time, which reads as constant random jitter during normal play.
+// Only the handful of call sites where money genuinely just settled (a
+// deposit, a withdrawal, a claimed reward, a finished case/battle reveal)
+// pass pulse=true explicitly.
+//
+// balanceRevealLock: while a case-battle reveal is animating, the wallet
+// number in the topbar must not change (that's the whole point of the
+// reveal - you watch it happen, you don't already know the number from the
+// corner of your eye). Every code path that could touch the display during
+// that window is routed through here rather than trusting each call site to
+// remember not to - `me.balance` itself still updates immediately (so
+// anything reading it, like a Max button, sees the true value), only the
+// visible text/pulse is deferred until unlockBalanceReveal() flushes it.
+let balanceRevealLock = false;
+let pendingBalanceFlush = null;
+function setBalance(b, pulse = false) {
   if (b === undefined || !me) return;
   me.balance = b;
+  if (balanceRevealLock) { pendingBalanceFlush = b; return; }
   const el = $('#balance');
   el.textContent = fmt(b);
-  el.animate([{ transform: 'scale(1.15)' }, { transform: 'scale(1)' }], { duration: 200 });
+  if (pulse) el.animate([{ transform: 'scale(1.15)' }, { transform: 'scale(1)' }], { duration: 200 });
+}
+function lockBalanceReveal() { balanceRevealLock = true; }
+function unlockBalanceReveal(pulse = true) {
+  balanceRevealLock = false;
+  if (pendingBalanceFlush !== null) { const b = pendingBalanceFlush; pendingBalanceFlush = null; setBalance(b, pulse); }
 }
 
 // ---------- sounds ----------
@@ -157,14 +189,23 @@ function route() {
   const target = $(`[data-page="${page}"]`) ? page : 'home';
   // leaving Cases (whether you were on single-case or spectating a battle) always
   // resets back to the battles lobby for next time - it should never resume in place
-  if (lastRoutedPage === 'cases' && target !== 'cases') showCasesView('battles');
+  if (lastRoutedPage === 'cases' && target !== 'cases') { showCasesView('battles'); unlockBalanceReveal(false); }
   lastRoutedPage = target;
   $$('.page').forEach((p) => p.classList.toggle('hidden', p.dataset.page !== target));
   $$('.sidenav a[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === target));
   if (target === 'fair') renderFair();
-  if (target === 'cases') refreshBattles();
+  if (target === 'cases') {
+    // a #/cases?battle=ID link clicked/pasted while the app is already
+    // running (hashchange, no full page reload - the boot-time resume only
+    // covers a fresh load) should still drop straight into that room
+    const roomId = (location.hash.match(/^#\/cases\?battle=(\d+)/) || [])[1];
+    if (roomId && watchingId !== Number(roomId)) enterRoom(Number(roomId));
+    else if (!roomId) refreshBattles();
+  }
+  if (target === 'roulette') refreshRoulette();
   if (target === 'leaderboard') renderLeaderboard();
   if (target === 'rewards') renderRewards();
+  if (target === 'referral') renderReferral();
   if (target === 'stats') renderStats();
   if (target === 'settings') renderSettings();
   syncActiveGame(target);
@@ -226,8 +267,16 @@ function showModal(name) {
   if (name === 'deposit') openDepositModal();
   if (name === 'withdraw') { $('#withdraw-error').textContent = ''; $('#withdraw-amount').value = ''; }
 }
+let upTipTarget = null; // username currently open in the profile modal - what a tip actually goes to
 async function openUserProfile(username) {
   showModal('userprofile');
+  upTipTarget = username;
+  $('#up-tip-error').textContent = '';
+  $('#up-tip-row').classList.add('hidden');
+  $('#up-tip-amount').value = '';
+  // no tipping yourself, and no tip button until you're actually signed in
+  const isMe = !!me && (me.mcUsername || me.username) === username;
+  $('#up-tip-btn').classList.toggle('hidden', !me || isMe);
   $('#up-name').textContent = username;
   $('#up-avatar').src = avatarUrl(username, 64);
   $('#up-level').textContent = ' '; // keep the pill's height so it doesn't pop in later
@@ -263,6 +312,23 @@ async function openUserProfile(username) {
   }
 }
 function hideModal() { $('#modal-backdrop').classList.add('hidden'); stopLinkPoll(); }
+
+$('#up-tip-btn').onclick = () => {
+  $('#up-tip-row').classList.toggle('hidden');
+  if (!$('#up-tip-row').classList.contains('hidden')) $('#up-tip-amount').focus();
+};
+$('#up-tip-send-btn').onclick = async () => {
+  $('#up-tip-error').textContent = '';
+  if (!upTipTarget) return;
+  try {
+    const d = await api('tip', { username: upTipTarget, amount: $('#up-tip-amount').value });
+    setBalance(d.balance, true);
+    SND.coin();
+    toast(`Tipped ${$('#up-tip-amount').value} to ${upTipTarget}`, true);
+    $('#up-tip-row').classList.add('hidden');
+    $('#up-tip-amount').value = '';
+  } catch (e) { $('#up-tip-error').textContent = e.message; }
+};
 
 document.addEventListener('click', (e) => {
   const m = e.target.closest('[data-modal]');
@@ -300,7 +366,7 @@ $('#withdraw-go-btn').onclick = async () => {
   if (!amount || amount < 1) { $('#withdraw-error').textContent = 'Enter a valid amount'; return; }
   try {
     const d = await api('mc/withdraw', { amount: Math.floor(amount) });
-    setBalance(d.balance);
+    setBalance(d.balance, true);
     hideModal();
     toast('Withdrawal sent — check in-game!', true);
   } catch (e) { $('#withdraw-error').textContent = e.message; }
@@ -320,11 +386,15 @@ function applyUser(user) {
   me = user;
   $('#wallet').classList.toggle('hidden', !user);
   $('#rewards-btn').classList.toggle('hidden', !user);
+  $('#referral-btn').classList.toggle('hidden', !user);
   $('#auth-buttons').classList.toggle('hidden', !!(user && user.mcUsername));
   $('#user-menu').classList.toggle('hidden', !user);
   if (user) {
     $('#username-label').textContent = user.mcUsername || user.username;
-    $('#balance').textContent = fmt(user.balance);
+    // route through setBalance rather than writing #balance directly, so a
+    // battle-reveal lock (see setBalance) also holds for this path - nothing
+    // should reveal the post-battle balance early, however it gets fetched
+    if (balanceRevealLock) pendingBalanceFlush = user.balance; else $('#balance').textContent = fmt(user.balance);
     $('#profile-avatar').onerror = function () { this.onerror = null; this.src = '/img/donut.svg'; };
     $('#profile-avatar').src = avatarUrl(user.mcUsername || user.username, 64);
     $('#profile-avatar').alt = `${user.mcUsername || user.username} avatar`;
@@ -378,7 +448,7 @@ async function pollLinkStatus(expiresAt) {
 $('#link-start-btn').onclick = async () => {
   $('#link-error').textContent = '';
   try {
-    const d = await api('mc/link/start', {});
+    const d = await api('mc/link/start', { refCode: localStorage.getItem('dw-ref') || undefined });
     SND.click();
     showLinkPending(d);
   } catch (e) { $('#link-error').textContent = e.message; }
@@ -395,7 +465,7 @@ document.addEventListener('click', (e) => {
   const h = e.target.closest('[data-half]'); const d = e.target.closest('[data-double]'); const m = e.target.closest('[data-max]');
   if (h) { const i = $('#' + h.dataset.half); i.value = fmt(Math.max(0.1, (parseAmt(i.value) || 0) / 2)); }
   if (d) { const i = $('#' + d.dataset.double); i.value = fmt((parseAmt(i.value) || 0) * 2); }
-  if (m) { const i = $('#' + m.dataset.max); i.value = me ? fmt(me.balance) : ''; if (!me) toast('place a bet to load your balance'); }
+  if (m) { const i = $('#' + m.dataset.max); i.value = me ? exactAmt(me.balance) : ''; if (!me) toast('place a bet to load your balance'); }
 });
 
 // send the raw text ("1.5b" etc) - the server does the real parsing
@@ -413,6 +483,8 @@ document.addEventListener('click', (e) => {
 });
 $('#dd-rewards-btn').onclick = () => { $('#profile-dropdown').classList.add('hidden'); location.hash = '#/rewards'; };
 $('#rewards-btn').onclick = () => { location.hash = '#/rewards'; };
+$('#dd-referral-btn').onclick = () => { $('#profile-dropdown').classList.add('hidden'); location.hash = '#/referral'; };
+$('#referral-btn').onclick = () => { location.hash = '#/referral'; };
 $('#dd-stats-btn').onclick = () => { $('#profile-dropdown').classList.add('hidden'); location.hash = '#/stats'; };
 $('#dd-settings-btn').onclick = () => { $('#profile-dropdown').classList.add('hidden'); location.hash = '#/settings'; };
 
@@ -655,7 +727,7 @@ async function openSingle() {
 
   // settle
   stage.classList.remove('dim');
-  setBalance(d.balance);
+  setBalance(d.balance, true);
   const profit = d.payout - detailCase.price * d.qty;
   if (profit >= 0) SND.win(); else SND.boom();
   const names = d.results.map((r) => r.item.name).join(', ');
@@ -672,7 +744,7 @@ document.addEventListener('click', (e) => {
 
 // ================= CASES: battle lobby =================
 const SPEED_DELAY = { normal: 700, quick: 280, instant: 0 };
-const MAX_PER_CASE = 100;   // effectively no per-case cap in a battle lineup
+const MAX_PER_CASE = 200;   // matches server's MAX_TOTAL/MAX_COUNT in battles.js
 let battleSpeed = 'normal', battleMode = 'standard', battleSize = '1v1';
 let lineup = [];            // [{caseId, count}]
 let watchingId = null;      // battle id currently in the room
@@ -688,7 +760,18 @@ function showCasesView(view) {
   $('#tab-battles').classList.toggle('active', view !== 'single');
   $('#tab-single').classList.toggle('active', view === 'single');
   $('#battle-create-btn').classList.toggle('hidden', view === 'single');
-  if (view !== 'room') { clearInterval(roomPoll); roomPoll = null; watchingId = null; }
+  // the "Create case battle" button (and its cost badge) lives in the shared
+  // topbar, visible on every view except single-case - so leaving the create
+  // screen without resetting `lineup` left the badge showing a stale total
+  // (e.g. "3.3B") on the plain lobby view, where no lineup is even in play
+  if (view !== 'create') { lineup = []; updateTotal(); }
+  if (view !== 'room') {
+    clearInterval(roomPoll); roomPoll = null; watchingId = null;
+    // drop the ?battle= param once we're not actually watching it anymore,
+    // otherwise a later refresh would try to resume a room the user
+    // deliberately left
+    if (location.hash.startsWith('#/cases?battle=')) history.replaceState(null, '', '#/cases');
+  }
 }
 $('#tab-battles').onclick = () => { SND.click(); showCasesView('battles'); refreshBattles(); };
 $('#tab-single').onclick = () => { SND.click(); showCasesView('single'); };
@@ -838,6 +921,20 @@ function historyRow(b) {
     <span class="hr-cases">${casesCount}📦</span><span class="hr-pot coin">${fmt(r.pot)}</span>`;
   row.appendChild(meta);
 
+  // which cases, and how many of each - was just a bare count before, leaving
+  // a lot of dead space in the row on wider screens
+  const cases = document.createElement('span');
+  cases.className = 'hr-case-icons';
+  b.lineup.forEach((l) => {
+    const c = document.createElement('span');
+    c.className = 'b-case clickable';
+    c.innerHTML = `<img src="/img/items/${l.cover}.png" alt="${l.name}">` + (l.count > 1 ? `<i>x${l.count}</i>` : '');
+    c.title = `${l.name} — click to see drops`;
+    c.onclick = (e) => { e.stopPropagation(); showCasePeek(l.caseId); };
+    cases.appendChild(c);
+  });
+  row.appendChild(cases);
+
   const players = document.createElement('div');
   players.className = 'hr-players';
   b.players.forEach((p, i) => {
@@ -849,7 +946,7 @@ function historyRow(b) {
     const cell = document.createElement('div');
     cell.className = 'hr-player ' + (won ? 'won' : 'lost');
     const skin = avatarSkin(p, (p.name || '?') + ':' + i);
-    cell.innerHTML = `<div class="hr-pfp"><img src="${avatarUrl(skin, 40)}" alt="${p.name} avatar" loading="lazy" onerror="this.onerror=null;this.src='/img/donut.svg'">${won ? '<span class="hr-crown">🏆</span>' : ''}</div>
+    cell.innerHTML = `<div class="hr-pfp"><img src="${avatarUrl(skin, 40)}" alt="${p.name} avatar" loading="lazy" onerror="this.onerror=null;this.src='/img/donut.svg'"></div>
       <span class="hr-name">${p.name}</span>
       <span class="hr-amt">${won ? '+' + fmt(r.share) : fmt(r.totals[i])}</span>`;
     players.appendChild(cell);
@@ -888,6 +985,22 @@ function seatEls(b) {
   return frag;
 }
 
+// mirrors the timing constants in animateBattle()/revealDurationMs() (battles.js)
+// purely to ESTIMATE which round a revealing battle is probably showing right
+// now, for the lobby row - not exact, just close enough to feel alive at a
+// glance. The lobby never receives pulls/results, so this is display-only.
+function estimateRevealRound(b) {
+  const roundsN = b.lineup.reduce((s, l) => s + l.count, 0);
+  if (!b.resolvedAt) return { round: 1, roundsN };
+  const speed = b.speed || 'normal';
+  if (speed === 'instant') return { round: roundsN, roundsN };
+  const spinDur = speed === 'quick' ? 1500 : 2700;
+  const perRound = spinDur + 800;
+  const elapsed = Date.now() - b.resolvedAt - 3000; // minus the shared intro wait (animateBattle's introWait)
+  const round = Math.max(1, Math.min(roundsN, Math.floor(elapsed / perRound) + 1));
+  return { round, roundsN };
+}
+
 function battleRow(b) {
   const row = document.createElement('div');
   row.className = 'battle-row';
@@ -919,32 +1032,58 @@ function battleRow(b) {
   peek.innerHTML = `<img src="/img/icons/eye.png" alt="Preview drops">`;
   peek.onclick = (e) => { e.stopPropagation(); SND.click(); enterRoom(b.id); };
   actions.appendChild(peek);
-  const btn = document.createElement('button');
-  btn.className = 'btn ' + (isMine ? 'btn-ghost' : 'btn-green');
-  btn.textContent = isMine ? 'View' : `Join for ${fmt(b.cost)}`;
-  btn.onclick = async () => {
-    if (isMine) return enterRoom(b.id);
-    try {
-      const d = await api('battles/join', { id: b.id });
-      SND.pop();
-      enterRoom(b.id, d.battle);
-    } catch (e) { toast(e.message); }
-  };
-  actions.appendChild(btn);
+  if (b.revealing) {
+    // full and already resolved server-side, but still mid-reveal for anyone
+    // watching - not joinable, so only the eye/spectate button shows, plus
+    // a live-ish round counter instead of a dead "Revealing…" label
+    const { round, roundsN } = estimateRevealRound(b);
+    const prog = document.createElement('span');
+    prog.className = 'b-progress'; prog.textContent = `${round}/${roundsN}`;
+    actions.appendChild(prog);
+  } else {
+    const btn = document.createElement('button');
+    btn.className = 'btn ' + (isMine ? 'btn-ghost' : 'btn-green');
+    btn.textContent = isMine ? 'View' : `Join for ${fmt(b.cost)}`;
+    btn.onclick = async () => {
+      if (isMine) return enterRoom(b.id);
+      try {
+        const d = await api('battles/join', { id: b.id });
+        SND.pop();
+        enterRoom(b.id, d.battle);
+      } catch (e) { toast(e.message); }
+    };
+    actions.appendChild(btn);
+  }
   row.appendChild(actions);
   return row;
 }
 
 function enterRoom(id, battle) {
+  unlockBalanceReveal(false); // clear any stale lock from a reveal we navigated away from mid-animation
   watchingId = id;
   animatedDone = false;
   lastArenaFp = null;
   showCasesView('room');
   $('#room-msg').textContent = '';
+  // reflect which battle is open in the URL (replaceState, not a real nav -
+  // doesn't fire hashchange/re-run route()) so refreshing or closing and
+  // reopening the tab resumes this exact room instead of dumping back to
+  // the lobby with no way back in
+  history.replaceState(null, '', '#/cases?battle=' + id);
   if (battle) renderRoom(battle);
+  let pollFails = 0;
   const poll = async () => {
     if (watchingId !== id) return;
-    try { renderRoom((await api('battles/' + id)).battle); } catch {}
+    try { renderRoom((await api('battles/' + id)).battle); pollFails = 0; }
+    catch (e) {
+      // a battle that's aged out of history (or never existed - e.g. a stale
+      // ?battle= link) fails every poll forever with the old silent catch;
+      // bail back to the lobby instead of spinning on a dead room
+      if (++pollFails >= 5 && watchingId === id) {
+        toast("That battle isn't available anymore");
+        showCasesView('battles'); refreshBattles();
+      }
+    }
   };
   if (!battle || battle.status !== 'done') poll();
   clearInterval(roomPoll);
@@ -988,6 +1127,7 @@ function renderRoom(b) {
   if (b.status === 'done' && b.result && !animatedDone) {
     animatedDone = true;
     clearInterval(roomPoll); roomPoll = null;
+    lockBalanceReveal();
     animateBattle(b);
   }
 }
@@ -1087,7 +1227,7 @@ function buildBattleArena(b, playing) {
     const el = document.createElement('div');
     el.className = 'bt-scase clickable';
     el.title = c ? `${c.name} — click to see drops` : '';
-    el.innerHTML = `<img src="/img/items/${c ? c.cover : ''}.png" alt="${c ? c.name : 'case'}">`;
+    el.innerHTML = `<img src="/img/items/${c ? c.cover : ''}.png" alt="${c ? c.name : 'case'}"><b>${c ? c.name : ''}</b>`;
     el.onclick = () => showCasePeek(rd.caseId);
     strip.appendChild(el);
   });
@@ -1238,6 +1378,19 @@ function jackpotSpin(players, totals, winnerSeat, dur) {
   });
 }
 
+// places a round's result instantly (no spin animation) - used both for the
+// speed==='instant' setting and for fast-forwarding rounds a returning viewer
+// already missed, so catching up never replays time that's already passed
+function placeRoundInstant(h, pi, it) {
+  h.reels[pi].style.transition = 'none';
+  h.reels[pi].style.transform = 'translateY(0)';
+  h.reels[pi].innerHTML = '';
+  const cell = btSpinCell(it);
+  h.reels[pi].appendChild(cell);
+  const vp = h.reels[pi].parentElement.clientHeight;
+  h.reels[pi].style.transform = `translateY(${-(cell.offsetHeight / 2 - vp / 2)}px)`;
+}
+
 async function animateBattle(b) {
   const r = b.result;
   // clearing roomPoll (on navigating away) only stops future polling - this
@@ -1254,28 +1407,83 @@ async function animateBattle(b) {
   $('#room-msg').textContent = 'Grabbing EOS Block...';
   $('#room-msg').className = 'stage-msg';
 
-  if (speed !== 'instant') {
-    if (r.resolvedAt) {
-      // Start the animation roughly 2 seconds after the server resolves it to sync clients
-      const toWait = (r.resolvedAt + 2000) - Date.now();
-      if (toWait > 0 && toWait < 3000) await sleep(toWait);
-    } else {
-      await sleep(550);
-    }
-  }
-  if (!stillWatching()) return;
-
   const h = buildBattleArena(b, true);
   const roundsN = r.rounds.length;
-  $('#room-msg').textContent = `Mode: ${r.mode}. Opening…`;
-  $('#room-msg').className = 'stage-msg';
   $('#jp-wrap').classList.add('hidden'); // reset from any previous jackpot reveal
 
   const scases = h.strip.querySelectorAll('.bt-scase');
   const spinDur = speed === 'instant' ? 0 : speed === 'quick' ? 1500 : 2700;
+  const pauseDur = speed === 'instant' ? 150 : 800;
+  const introWait = speed === 'instant' ? 0 : r.resolvedAt ? 3000 : 550;
+  const jackpotDur = r.mode === 'jackpot' && speed !== 'instant' ? 4200 : 0;
   const running = b.players.map(() => 0);
 
-  for (let round = 0; round < roundsN; round++) {
+  // Every viewer times the reveal off r.resolvedAt (a fixed server timestamp),
+  // not off whenever their own client happened to start watching - so two
+  // people who join at different moments see the same round at the same real
+  // time, and someone who closes the tab and reopens it 20s later resumes at
+  // the correct spot instead of replaying from round 0. Rounds that have
+  // already "happened" (per the clock) are placed instantly with no spin;
+  // only whatever round is current-or-next actually animates live.
+  //
+  // "elapsed" is measured against the SERVER's clock (b.serverNow, stamped
+  // fresh on every response), not this device's own Date.now() - two
+  // players' clocks can genuinely disagree by seconds, which otherwise
+  // desyncs this badly: one client thinks the reveal is already old news
+  // and skips the intro wait entirely while the other still sits on
+  // "Grabbing EOS Block..." for the full delay.
+  const elapsed = r.resolvedAt ? (b.serverNow || Date.now()) - r.resolvedAt : 0;
+  const perRound = spinDur + pauseDur;
+  const totalMs = introWait + roundsN * perRound + jackpotDur;
+  const fullyDone = elapsed >= totalMs;
+  // FRESH_MS guards the normal "just joined/just resolved" path from the
+  // catch-up math meant for a genuinely stale resume (tab closed and
+  // reopened later). Two players' joins land microseconds apart server-side,
+  // but their own requests/renders don't - ordinary network latency, a slow
+  // poll tick, or a sluggish tab can easily put elapsed a couple seconds
+  // past introWait even though nothing was "missed". Without this, that
+  // player's catchUpRound computes >0 and they silently skip rounds instead
+  // of watching them - which reads as "some players insta-start". Only
+  // elapsed clearly beyond any realistic latency (this generous) is treated
+  // as an actual stale resume.
+  const FRESH_MS = 8000;
+  const catchUpRound = fullyDone ? roundsN
+    : elapsed < FRESH_MS ? 0
+    : Math.max(0, Math.min(roundsN, Math.floor((elapsed - introWait) / perRound)));
+
+  if (!fullyDone && catchUpRound === 0 && introWait > 0) {
+    // clamp to introWait, not "however much is left" - a client arriving
+    // late (high elapsed, still under FRESH_MS) gets 0 wait and starts
+    // immediately rather than negative-waiting into skipping the intro
+    // entirely; a client arriving right on time gets close to the full
+    // introWait. Both land on screen close together instead of one racing
+    // ahead the moment its own elapsed ticks past the introWait line.
+    const toWait = Math.max(0, introWait - elapsed);
+    if (toWait > 0) await sleep(toWait);
+  }
+  if (!stillWatching()) return;
+
+  // instantly fill in every round a returning/late viewer already missed
+  for (let round = 0; round < catchUpRound; round++) {
+    scases.forEach((e, i) => e.classList.toggle('active', false));
+    b.players.forEach((p, pi) => {
+      const it = r.pulls[pi][round];
+      placeRoundInstant(h, pi, it);
+      const inv = btInvItem(it);
+      h.invs[pi].appendChild(inv);
+      inv.classList.add('in');
+      running[pi] += it.value;
+      h.vals[pi].textContent = fmt(running[pi]);
+    });
+  }
+  h.counter.textContent = `${Math.min(catchUpRound, roundsN)}/${roundsN}`;
+
+  if (catchUpRound < roundsN) {
+    $('#room-msg').textContent = `Mode: ${r.mode}. Opening…`;
+    $('#room-msg').className = 'stage-msg';
+  }
+
+  for (let round = catchUpRound; round < roundsN; round++) {
     scases.forEach((e, i) => e.classList.toggle('active', i === round));
     h.counter.textContent = `${round + 1}/${roundsN}`;
     const c = caseById[r.rounds[round].caseId];
@@ -1283,17 +1491,7 @@ async function animateBattle(b) {
 
     await Promise.all(b.players.map((p, pi) => {
       const it = r.pulls[pi][round];
-      if (spinDur === 0) {
-        h.reels[pi].style.transition = 'none';
-        h.reels[pi].style.transform = 'translateY(0)';
-        h.reels[pi].innerHTML = '';
-        const cell = btSpinCell(it);
-        h.reels[pi].appendChild(cell);
-        // center the single cell
-        const vp = h.reels[pi].parentElement.clientHeight;
-        h.reels[pi].style.transform = `translateY(${-(cell.offsetHeight / 2 - vp / 2)}px)`;
-        return Promise.resolve();
-      }
+      if (spinDur === 0) { placeRoundInstant(h, pi, it); return Promise.resolve(); }
       return btSpin(h.reels[pi], pool || [it], it, spinDur);
     }));
     if (!stillWatching()) return;
@@ -1311,7 +1509,7 @@ async function animateBattle(b) {
     if (stillWatching()) { if (topTier >= 5) SND.impact(0.6); else SND.reveal(Math.min(topTier, 4)); }
     // brief pause on the landed item before the next case spins up - long enough to
     // actually read what you pulled, short enough not to drag out a multi-round battle
-    await sleep(speed === 'instant' ? 150 : 800);
+    await sleep(pauseDur);
     if (!stillWatching()) return;
   }
 
@@ -1319,10 +1517,15 @@ async function animateBattle(b) {
   const winnerSeats = r.winnerSeats || b.players.map((p, i) => (r.winners.includes(p.name) ? i : -1)).filter((i) => i >= 0);
 
   // jackpot: the pot goes to one seat/team picked with odds proportional to what
-  // each side pulled - spin the wheel so that's visible before revealing the winner
+  // each side pulled - spin the wheel so that's visible before revealing the winner.
+  // skip the spin (just show the pick) if the clock says this window already passed.
   if (r.mode === 'jackpot' && speed !== 'instant') {
-    $('#room-msg').textContent = 'Spinning the jackpot…';
-    await jackpotSpin(b.players, r.totals, winnerSeats[0], 4200);
+    if (fullyDone || elapsed >= introWait + roundsN * perRound + jackpotDur) {
+      $('#jp-wrap').classList.add('hidden');
+    } else {
+      $('#room-msg').textContent = 'Spinning the jackpot…';
+      await jackpotSpin(b.players, r.totals, winnerSeats[0], 4200);
+    }
   }
   if (!stillWatching()) return;
 
@@ -1345,7 +1548,8 @@ async function animateBattle(b) {
   const mySeat = b.youSeat ?? -1;
   const inIt = mySeat >= 0;
   const iWon = inIt && winnerSeats.includes(mySeat);
-  if (inIt) { if (iWon) SND.win(); else SND.boom(); loadMe(); }
+  if (inIt) { if (iWon) SND.win(); else SND.boom(); await loadMe(); }
+  unlockBalanceReveal(true); // now (and only now) is the wallet number allowed to visibly change
   const winNames = [...new Set(r.winners)];
   $('#room-msg').textContent = `${winNames.join(' & ')} take${r.winners.length > 1 ? '' : 's'} the pot: ${fmt(r.pot)} (${fmt(r.share)} each)`;
   $('#room-msg').className = 'stage-msg ' + (inIt ? (iWon ? 'good' : 'bad') : '');
@@ -1402,7 +1606,7 @@ $('#daily-open').onclick = async () => {
     msg.textContent = 'Opening...'; msg.className = 'stage-msg';
     spinReel(dailyItems, d.itemIndex, '#daily-reel');
     setTimeout(() => {
-      setBalance(d.balance);
+      setBalance(d.balance, true);
       if (onDailyPage()) SND.win();
       msg.textContent = `${d.item.name}! +${fmt(d.amount)} coins. See you tomorrow.`;
       msg.className = 'stage-msg good';
@@ -1785,6 +1989,263 @@ $('#chicken-cashout').onclick = async () => {
   } catch (e) { toast(e.message); }
 };
 
+// ================= BLOCK ROULETTE =================
+// One shared round, driven entirely by the server's clock - this client only
+// polls state and renders whatever phase it's in. No client-side timers own
+// any game logic (unlike e.g. the countdown on the leaderboard, which is
+// purely decorative); the poll response is the only source of truth.
+const ROUL_COLOR_LABEL = { red: 'Red', purple: 'Purple', yellow: 'Gold' };
+let roulColors = null;       // [{key, mult, icon, chance}] - fetched once, doesn't change
+let roulLastRoundId = null;
+let roulLastStatus = null;
+let roulPollTimer = null;
+let roulAnimating = false;   // guards against re-triggering the spin if a poll lands mid-animation
+let roulAnimatedRoundId = null; // round id whose reveal has already played - the animation's own
+                                 // 4.2s lock can expire before the server's 5s spin window does, so
+                                 // a poll landing right as status flips spinning->done would otherwise
+                                 // pass the roulAnimating guard and replay the same round's spin twice
+
+// each color IS its own bet button (click it to bet the current amount on
+// that color directly) - no separate select-a-color-then-press-Place-Bet
+// step, matching the reference layout's 3 standalone "<mult>x Bet" buttons
+async function placeRoulBet(color) {
+  if (!me) return toast('link your Minecraft account first');
+  try {
+    await api('roulette/bet', { color, amount: $('#roul-amount').value });
+    SND.pop();
+    refreshRoulette();
+  } catch (e) { toast(e.message); }
+}
+function roulBettorHTML(b, showPay) {
+  // right side: plain amount while the round runs; once settled, winners
+  // flip to +payout in green and losers' stake goes red
+  const right = !showPay || b.payout === null
+    ? `<span class="roul-col-bettor-amt">${fmt(b.amount)}</span>`
+    : b.payout > 0
+      ? `<span class="roul-col-bettor-amt win">+${fmt(b.payout)}</span>`
+      : `<span class="roul-col-bettor-amt loss">${fmt(b.amount)}</span>`;
+  return `<div class="roul-col-bettor${b.mine ? ' mine' : ''}">
+    <img class="roul-col-bettor-pfp" src="${avatarUrl(b.username, 24)}" alt="${b.username} avatar" loading="lazy" onerror="this.onerror=null;this.src='/img/donut.svg'">
+    <span class="roul-col-bettor-name">${b.username}</span>
+    ${right}
+  </div>`;
+}
+function roulColHTML(c, bets, status, myColors, showPay) {
+  // label stays "<mult>x Bet" through every phase like the reference - the
+  // disabled state alone communicates "can't bet right now"
+  const disabled = status !== 'betting' || myColors.includes(c.key);
+  const sorted = bets.slice().sort((a, b) => b.amount - a.amount);
+  return `<div class="roul-col roul-c-${c.key}">
+    <button class="roul-col-bet-btn" data-roulcolor="${c.key}" ${disabled ? 'disabled' : ''}>${c.mult}× Bet</button>
+    <div class="roul-col-bettors">
+      ${sorted.length ? sorted.map((b) => roulBettorHTML(b, showPay)).join('') : '<p class="hint">No bets yet.</p>'}
+    </div>
+  </div>`;
+}
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.roul-col-bet-btn');
+  if (btn && !btn.disabled) placeRoulBet(btn.dataset.roulcolor);
+});
+
+function roulReelCellEl(colorKey) {
+  const c = roulColors.find((x) => x.key === colorKey);
+  const div = document.createElement('div');
+  div.className = 'reel-item';
+  div.innerHTML = `<img src="/img/items/${c.icon}.png" alt="${ROUL_COLOR_LABEL[c.key]}"><b>${ROUL_COLOR_LABEL[c.key]}</b><span class="mult">${c.mult}×</span>`;
+  return div;
+}
+function roulWeightPick() {
+  let r = Math.random() * roulColors.reduce((s, c) => s + c.chance, 0);
+  for (const c of roulColors) { r -= c.chance; if (r <= 0) return c.key; }
+  return roulColors[0].key;
+}
+let roulIdleFilled = false;
+// the reel used to sit empty (a blank black box) the whole time betting was
+// open, since it only ever got populated inside spinRoulReel() - fill it
+// with a static, non-scrolling preview strip so there's always something to
+// look at between rounds, same as the reference layout's always-full reel
+function roulFillIdle() {
+  const reel = $('#roul-reel');
+  if (!reel || reel.children.length) return;
+  reel.style.transition = 'none';
+  reel.style.transform = 'translateX(0)';
+  for (let i = 0; i < 20; i++) reel.appendChild(roulReelCellEl(roulWeightPick()));
+  roulIdleFilled = true;
+}
+// same "long weighted strip slides to a fixed winning slot" mechanic as
+// spinReel() (daily case) / btSpin() (battles) - matches the rest of the
+// site's reveal language instead of inventing a new one. No tick sound here
+// (unlike the case reels) - a 10s spin's worth of ticking got annoying fast.
+function spinRoulReel(winKey, onLand) {
+  const reel = $('#roul-reel');
+  reel.style.transition = 'none';
+  reel.style.transform = 'translateX(0)';
+  reel.innerHTML = '';
+  const SLOTS = 70, WIN_SLOT = 64, W = 134; // 128px item + 6px gap (roulette's reel-item is sized up from the shared 110px default)
+  // 8-10.5s, different every round so the drag-out feels alive - but the
+  // WINNER is always the server's committed result; only the travel time
+  // varies, never where it lands. Must stay under roulette.js's SPIN_MS
+  // minus poll latency + the EOS beat.
+  const DUR = 8000 + Math.random() * 2500;
+  for (let s = 0; s < SLOTS; s++) reel.appendChild(roulReelCellEl(s === WIN_SLOT ? winKey : roulWeightPick()));
+  const winEl = reel.children[WIN_SLOT];
+  const windowW = reel.parentElement.clientWidth;
+  const target = WIN_SLOT * W + W / 2 - windowW / 2;
+  reel.getBoundingClientRect(); // force the transform:0 reset to flush so the transition always starts from the same place
+  // start via setTimeout, NOT requestAnimationFrame: rAF freezes whenever the
+  // tab is backgrounded/throttled, which used to leave the transition never
+  // applied - players tabbing back saw the reel teleport or spin at the wrong
+  // time ("sometimes fast and quick, sometimes slow"). Timers + CSS
+  // transitions both run on wall-clock even in background tabs.
+  setTimeout(() => {
+    // extreme ease-out: the first couple seconds tear through most of the
+    // strip, then it spends the whole back half crawling into the winner
+    reel.style.transition = `transform ${Math.round(DUR)}ms cubic-bezier(0.06,0.9,0.12,1)`;
+    reel.style.transform = `translateX(${-target}px)`;
+  }, 30);
+  setTimeout(() => { winEl.classList.add('bt-win-pop'); if (onLand) onLand(); }, Math.round(DUR) + 250);
+}
+// late joiner (opened the page after the reveal already happened): don't
+// replay a spin for a round that's over, just show the reel parked on the
+// winner like everyone else is seeing
+function parkRoulReel(winKey) {
+  const reel = $('#roul-reel');
+  reel.style.transition = 'none';
+  reel.innerHTML = '';
+  const SLOTS = 20, WIN_SLOT = 10, W = 134;
+  for (let s = 0; s < SLOTS; s++) reel.appendChild(roulReelCellEl(s === WIN_SLOT ? winKey : roulWeightPick()));
+  const windowW = reel.parentElement.clientWidth;
+  reel.style.transform = `translateX(${-(WIN_SLOT * W + W / 2 - windowW / 2)}px)`;
+  reel.children[WIN_SLOT].classList.add('bt-win-pop');
+}
+function roulOnPage() {
+  const p = $('[data-page="roulette"]');
+  return !!p && !p.classList.contains('hidden');
+}
+
+function roulRecentHTML(recent) {
+  if (!recent.length) return '<span class="hint">No spins yet.</span>';
+  return recent.slice(0, 7).map((key) => {
+    const c = roulColors.find((x) => x.key === key);
+    return `<span class="roul-recent-chip roul-c-${key}" title="${ROUL_COLOR_LABEL[key]}">${c.mult}×</span>`;
+  }).join('');
+}
+// queued settle-effects (balance flush + win sound) for when the server says
+// 'done' while our reel animation is still finishing - fire them on land, not
+// mid-spin, so nothing spoils the outcome early
+let roulOnLandQueue = null;
+function roulWinText(colorKey) {
+  const c = roulColors.find((x) => x.key === colorKey);
+  return `Rolled ${c.mult}× (${ROUL_COLOR_LABEL[colorKey]})`;
+}
+async function refreshRoulette() {
+  if (!roulOnPage()) return;
+  let d;
+  try { d = await api('roulette/state'); } catch { return; }
+  if (!roulColors) roulColors = d.colors;
+  if (!roulIdleFilled) roulFillIdle();
+  if (!d.round) return;
+  const r = d.round;
+  const statusChanged = r.status !== roulLastStatus;
+
+  // fires exactly once per round id, right as the color becomes known -
+  // gating on roulAnimatedRoundId (not just the roulAnimating timer) means a
+  // poll that lands after the animation lock has already expired but before
+  // the round moves on (e.g. catching both "spinning" and "done" for the
+  // same round) can't replay the same reveal a second time
+  const phaseEl = $('#roul-phase');
+  if (r.status !== 'betting' && r.color && roulAnimatedRoundId !== r.id && !roulAnimating) {
+    roulAnimatedRoundId = r.id;
+    if (r.status === 'done') {
+      // joined after the reveal - just park on the result, no replayed spin
+      parkRoulReel(r.color);
+      phaseEl.textContent = roulWinText(r.color);
+      phaseEl.className = 'roul-phase roul-phase-done roul-c-' + r.color;
+    } else {
+      roulAnimating = true;
+      // pre-roll theater in the order the user expects from the reference:
+      // an EOS-block beat with the reel still parked, THEN "Rolling…" as the
+      // reel actually takes off, THEN the winner announced the moment it
+      // lands. Flavor-only - the outcome was locked server-side when betting
+      // closed. This sequence owns #roul-phase until the land.
+      const blockNum = Math.floor(100_000_000 + Math.random() * 900_000_000);
+      phaseEl.textContent = `Waiting for EOS block #${blockNum}`;
+      phaseEl.className = 'roul-phase roul-phase-spinning';
+      setTimeout(() => {
+        if (roulAnimatedRoundId !== r.id) return;
+        phaseEl.textContent = 'Rolling…';
+        spinRoulReel(r.color, () => {
+          roulAnimating = false;
+          if (roulAnimatedRoundId === r.id) {
+            phaseEl.textContent = roulWinText(r.color);
+            phaseEl.className = 'roul-phase roul-phase-done roul-c-' + r.color;
+          }
+          if (roulOnLandQueue) { roulOnLandQueue(); roulOnLandQueue = null; }
+          refreshRoulette(); // repaint immediately so payouts show the moment it lands
+        });
+      }, 1200);
+    }
+  }
+  roulLastRoundId = r.id; roulLastStatus = r.status;
+
+  // hide settled payouts (green +wins / red losses in the columns) until the
+  // reel has actually landed - the server flips to 'done' on its own clock,
+  // which can be a beat before our animation finishes
+  const showPay = r.status === 'done' && !roulAnimating;
+
+  if (r.status === 'betting') {
+    phaseEl.textContent = 'Rolling in';
+    phaseEl.className = 'roul-phase roul-phase-betting';
+  } else if (showPay && r.color) {
+    // pauses here (holds until the next round opens, well over 2s) so
+    // everyone sees what it landed on before it resets
+    phaseEl.textContent = roulWinText(r.color);
+    phaseEl.className = 'roul-phase roul-phase-done roul-c-' + r.color;
+  }
+  // 'spinning' (and 'done'-while-still-animating) is left alone here - the
+  // EOS-block/Rolling…/winner sequence above owns it
+
+  // only betting has a real deadline worth counting down - the spin's length
+  // is fixed and purely cosmetic, so showing a countdown against it just
+  // relayed stale-looking info whenever a poll landed a little late
+  $('#roul-timer').textContent = r.status === 'betting'
+    ? `${Math.max(0, Math.round((r.bettingEndsAt - Date.now()) / 1000))}s` : '';
+
+  $('#roul-recent').innerHTML = roulRecentHTML(d.recent);
+  const mine = d.bets.filter((b) => b.mine);
+  const myColors = mine.map((b) => b.color);
+  $('#roul-color-cols').innerHTML = roulColors
+    .map((c) => roulColHTML(c, d.bets.filter((b) => b.color === c.key), r.status, myColors, showPay))
+    .join('');
+
+  const mybetEl = $('#roul-mybet');
+  if (mine.length) {
+    mybetEl.classList.remove('hidden');
+    mybetEl.innerHTML = `Your bet${mine.length > 1 ? 's' : ''}: ` + mine.map((b) => {
+      const c = roulColors.find((x) => x.key === b.color);
+      const pay = showPay && b.payout !== null
+        ? (b.payout > 0 ? ` <span class="win">+${fmt(b.payout)}</span>` : ' <span class="loss">lost</span>') : '';
+      return `<span class="roul-mybet-item"><img src="/img/items/${c.icon}.png" alt="">${ROUL_COLOR_LABEL[b.color]} · ${fmt(b.amount)}${pay}</span>`;
+    }).join('');
+  } else {
+    mybetEl.classList.add('hidden');
+  }
+
+  if (r.status === 'done' && mine.length && statusChanged) {
+    // fetch the real balance rather than guessing client-side - only fires
+    // once per settled round per player, right as the outcome is learned,
+    // not on every 1s poll after. If our reel is still spinning, queue it
+    // for the land instead of leaking the result early.
+    const applySettle = async () => {
+      try { const dm = await api('me'); if (dm.user) setBalance(dm.user.balance, true); } catch {}
+      if (mine.some((b) => b.payout > 0)) SND.win();
+    };
+    if (roulAnimating) roulOnLandQueue = applySettle;
+    else applySettle();
+  }
+}
+setInterval(refreshRoulette, 1500);
+
 // ================= BLACKJACK =================
 const bjEl = { msg: $('#bj-msg'), deal: $('#bj-deal'), actions: $('#bj-actions') };
 const SUIT_CHAR = { S: '♠', H: '♥', D: '♦', C: '♣' };
@@ -1911,7 +2372,9 @@ function chatAdd(m) {
   nameLine.appendChild(who);
   if (typeof m.level === 'number') {
     const lvl = document.createElement('span');
-    lvl.className = 'chat-level'; lvl.textContent = `Lvl ${m.level}`;
+    // border tier by level: <20 default (grey), 20-49 purple, 50 (max) gold
+    const tier = m.level >= 50 ? 'gold' : m.level >= 20 ? 'purple' : '';
+    lvl.className = 'chat-level' + (tier ? ' tier-' + tier : ''); lvl.textContent = `Lvl ${m.level}`;
     nameLine.appendChild(lvl);
   }
   card.appendChild(nameLine);
@@ -2079,6 +2542,46 @@ async function renderLeaderboard() {
     lbCache = top;
     paintLeaderboard(top);
   } catch {}
+  startLbCountdown();
+}
+
+// ---- 30-day race countdown - fetched once, then ticked client-side every
+// second off the same fixed endAt so it stays accurate without repolling ----
+let lbCountdownTimer = null;
+let lbEndAt = null;
+// lightweight digit-drop: only touches a segment's DOM (triggers its CSS
+// animation via a class + reflow) when its value actually changed, so 3 of
+// the 4 segments do nothing most ticks instead of restyling every second
+function setCdSeg(id, val) {
+  const el = $(id);
+  if (el.textContent === val) return;
+  el.textContent = val;
+  el.classList.remove('cd-drop');
+  void el.offsetWidth; // reflow - restarts the animation even if it was still running
+  el.classList.add('cd-drop');
+}
+function tickLbCountdown() {
+  if (!lbEndAt) return;
+  const left = Math.max(0, lbEndAt - Date.now());
+  const d = Math.floor(left / 86400000);
+  const h = Math.floor((left % 86400000) / 3600000);
+  const m = Math.floor((left % 3600000) / 60000);
+  const s = Math.floor((left % 60000) / 1000);
+  setCdSeg('#lb-cd-d', String(d).padStart(2, '0'));
+  setCdSeg('#lb-cd-h', String(h).padStart(2, '0'));
+  setCdSeg('#lb-cd-m', String(m).padStart(2, '0'));
+  setCdSeg('#lb-cd-s', String(s).padStart(2, '0'));
+  $('#lb-countdown').classList.toggle('lb-cd-ended', left <= 0);
+  if (left <= 0) { clearInterval(lbCountdownTimer); lbCountdownTimer = null; }
+}
+async function startLbCountdown() {
+  if (lbCountdownTimer || !$('#lb-countdown')) return;
+  try {
+    const { endAt } = await api('leaderboard/season');
+    lbEndAt = endAt;
+    tickLbCountdown();
+    lbCountdownTimer = setInterval(tickLbCountdown, 1000);
+  } catch {}
 }
 
 // ================= REWARDS (rakeback + level milestones) =================
@@ -2093,18 +2596,25 @@ function countdown(ms) {
 function rbCard(kind, info) {
   const ready = info.ready && info.amount > 0;
   const timeLeft = info.readyAt ? info.readyAt - Date.now() : 0;
-  const btnLabel = !info.ready ? countdown(timeLeft) : 'Claim';
-  return `<div class="rw-rb-card">
-    <span class="rw-rb-title">${RB_LABEL[kind]}</span>
+  const btnLabel = !info.ready ? countdown(timeLeft) : (info.amount > 0 ? 'Claim' : 'Nothing to claim yet');
+  return `<div class="rw-rb-card${ready ? ' ready' : ''}">
+    <div class="rw-rb-head">
+      <span class="rw-rb-title">${RB_LABEL[kind]}</span>
+      <span class="rw-rb-rate">0.1%</span>
+    </div>
     <span class="rw-rb-amt"><img src="/img/donut.svg" alt="Donuts">${fmt(info.amount)}</span>
     <button class="rw-rb-btn" data-rbkind="${kind}" ${ready ? '' : 'disabled'}>${btnLabel}</button>
   </div>`;
 }
-function milestoneRow(m) {
-  const cls = 'rw-milestone' + (m.unlocked ? ' unlocked' : '') + (m.claimed ? ' claimed' : '');
+function milestoneRow(m, isNext) {
+  const cls = 'rw-milestone' + (m.unlocked ? ' unlocked' : '') + (m.claimed ? ' claimed' : '') + (isNext ? ' next' : '');
   const claimBtn = m.unlocked && !m.claimed ? `<button class="rw-milestone-claim" data-mlevel="${m.level}">Claim</button>` : '';
+  const icon = m.claimed ? '/img/items/emerald.png' : m.unlocked ? '/img/items/nether_star.png' : '/img/items/name_tag.png';
   return `<div class="${cls}">
-    <span class="rw-milestone-level">Level ${m.level}</span>
+    <div class="rw-milestone-left">
+      <img class="rw-milestone-icon" src="${icon}" alt="">
+      <span class="rw-milestone-level">Level ${m.level}${isNext ? '<b class="rw-milestone-next-tag">Next</b>' : ''}</span>
+    </div>
     <div class="rw-milestone-right">
       <span class="rw-milestone-amt"><img src="/img/donut.svg" alt="Donuts">${fmt(m.reward)}</span>
       ${claimBtn}
@@ -2127,7 +2637,7 @@ async function renderRewards() {
     grid.querySelectorAll('[data-rbkind]').forEach((btn) => btn.onclick = async () => {
       try {
         const r = await api('rewards/rakeback', { kind: btn.dataset.rbkind });
-        setBalance(r.balance); SND.coin(); toast(`Claimed +${fmt(r.amount)} coins`, true);
+        setBalance(r.balance, true); SND.coin(); toast(`Claimed +${fmt(r.amount)} coins`, true);
         renderRewards();
       } catch (e) { toast(e.message); }
     });
@@ -2140,11 +2650,12 @@ async function renderRewards() {
     $('#rw-level-pct').textContent = lv.maxed ? 'Max level' : `${fmt(lv.remainingCoins)} to go`;
     $('#rw-level-next').textContent = lv.maxed ? `Level ${lv.maxLevel}` : `Level ${lv.level + 1}`;
     const ms = $('#rw-milestones');
-    ms.innerHTML = lv.milestones.map(milestoneRow).join('');
+    const nextIdx = lv.milestones.findIndex((m) => !m.unlocked);
+    ms.innerHTML = lv.milestones.map((m, i) => milestoneRow(m, i === nextIdx)).join('');
     ms.querySelectorAll('[data-mlevel]').forEach((btn) => btn.onclick = async () => {
       try {
         const r = await api('rewards/level', { level: Number(btn.dataset.mlevel) });
-        setBalance(r.balance); SND.coin(); toast(`Claimed +${fmt(r.amount)} coins`, true);
+        setBalance(r.balance, true); SND.coin(); toast(`Claimed +${fmt(r.amount)} coins`, true);
         renderRewards();
       } catch (e) { toast(e.message); }
     });
@@ -2156,6 +2667,74 @@ $$('.rw-tab').forEach((tab) => tab.onclick = () => {
   $('#rw-panel-levels').classList.toggle('hidden', tab.dataset.rwtab !== 'levels');
 });
 setInterval(renderRewards, 5000);
+
+// ================= REFERRAL =================
+function refUserRow(r) {
+  const when = new Date(r.joinedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return `<tr>
+    <td><span class="feed-user"><img class="feed-avatar" src="${avatarUrl(r.username, 32)}" alt="${r.username} avatar" loading="lazy" onerror="this.onerror=null;this.src='/img/donut.svg'"><span class="feed-username">${r.username}</span></span></td>
+    <td><span class="coin">${fmt(r.wagered)}</span></td>
+    <td class="win">+${fmt(r.earned)}</td>
+    <td>${when}</td>
+  </tr>`;
+}
+async function renderReferral() {
+  const page = $('[data-page="referral"]');
+  if (!page || page.classList.contains('hidden')) return;
+  $('#referral-signin').classList.toggle('hidden', !!me);
+  $('#referral-body').classList.toggle('hidden', !me);
+  if (!me) return;
+  try {
+    const d = await api('referrals');
+    $('#ref-code-text').textContent = d.code;
+    $('#ref-link-text').textContent = d.link;
+    $('#ref-rate-text').textContent = (d.rate * 100).toFixed(2).replace(/\.?0+$/, '') + '%';
+    $('#ref-count').textContent = d.referredCount;
+    $('#ref-total-earned').textContent = fmt(d.totalEarned);
+    $('#ref-claimable').textContent = fmt(d.claimableBalance);
+    $('#ref-claim-btn').disabled = d.claimableBalance <= 0;
+    $('#ref-users-table tbody').innerHTML = d.referredUsers.length
+      ? d.referredUsers.map(refUserRow).join('')
+      : '<tr><td colspan="4" class="stage-msg">Nobody yet — share your link.</td></tr>';
+    // only relevant before you've been referred by anyone - once set it's
+    // permanent, so hide the field entirely rather than show a dead-end form
+    $('#ref-enter-box').classList.toggle('hidden', !!d.referredBy);
+  } catch {}
+}
+$('#ref-code-edit-btn').onclick = () => {
+  const row = $('#ref-edit-row');
+  row.classList.toggle('hidden');
+  if (!row.classList.contains('hidden')) { $('#ref-code-input').value = $('#ref-code-text').textContent; $('#ref-code-input').focus(); }
+};
+$('#ref-code-save-btn').onclick = async () => {
+  const code = $('#ref-code-input').value.trim();
+  if (!code) return;
+  try {
+    await api('referrals/code', { code });
+    $('#ref-edit-row').classList.add('hidden');
+    toast('Referral code updated', true);
+    renderReferral();
+  } catch (e) { toast(e.message); }
+};
+$('#ref-claim-btn').onclick = async () => {
+  try {
+    const d = await api('referrals/claim', {});
+    setBalance(d.balance, true);
+    SND.coin();
+    toast(`Claimed +${fmt(d.claimed)} coins`, true);
+    renderReferral();
+  } catch (e) { toast(e.message); }
+};
+$('#ref-enter-btn').onclick = async () => {
+  const code = $('#ref-enter-input').value.trim();
+  if (!code) return;
+  try {
+    await api('referrals/enter', { code });
+    $('#ref-enter-input').value = '';
+    toast('Referral applied', true);
+    renderReferral();
+  } catch (e) { toast(e.message); }
+};
 
 // ================= STATS =================
 function statsBetRow(b) {
@@ -2222,6 +2801,16 @@ $('#settings-anon-toggle').onclick = async () => {
 };
 $('#settings-sound-toggle').onclick = () => { SND.toggle(); renderSettings(); };
 
+// ---- referral code capture: ?ref=CODE on any page load is remembered (a
+// visitor usually browses a while before linking their account), and sent
+// along the next time they start the Minecraft link flow. Doesn't overwrite
+// an already-stored code, so a stray link with no ?ref doesn't erase one
+// picked up earlier in the same browser. ----
+(() => {
+  const ref = new URLSearchParams(location.search).get('ref');
+  if (ref && /^[a-z0-9_]{1,16}$/i.test(ref)) localStorage.setItem('dw-ref', ref.toLowerCase());
+})();
+
 // ================= boot =================
 (async () => {
   // drop a "Provably Fair" button into every game panel
@@ -2235,17 +2824,38 @@ $('#settings-sound-toggle').onclick = () => { SND.toggle(); renderSettings(); };
   buildMinesGrid();
   buildTower();
   buildRoad(0);
-  // Cases always starts on the battles lobby - never resumes single-case or a
-  // watched battle room from a previous visit/reload.
-  showCasesView('battles');
+  // Cases starts on the battles lobby UNLESS the URL points at a specific
+  // room (#/cases?battle=ID, set by enterRoom() via replaceState) - that's
+  // what makes closing the tab and reopening it (or just hitting refresh)
+  // resume the exact battle you were watching instead of always dumping
+  // back to the lobby with no way back in. Single-case never resumes either
+  // way - there's no meaningful "open" state to restore there.
+  const resumeBattleId = (location.hash.match(/^#\/cases\?battle=(\d+)/) || [])[1];
+  if (resumeBattleId) {
+    // the room's case-strip icons key off caseById, populated by loadCases() -
+    // entering the room before that resolves would render every case icon
+    // blank/broken. Await it here specifically; the other independent boot
+    // fetches below still fire in parallel, unblocked.
+    await loadCases();
+    enterRoom(Number(resumeBattleId));
+  } else {
+    showCasesView('battles');
+  }
   route();
-  refreshFeed(); refreshBoard(); loadCases(); loadDaily(); refreshChat();
+  refreshFeed(); refreshBoard(); if (!resumeBattleId) loadCases(); loadDaily(); refreshChat();
   try {
     const d = await api('me');
     applyUser(d.user);
     if (d.user) { dailyReadyAt = d.user.dailyReadyAt; dailyStatus(); }
     // restore any game that was mid-flight before a refresh
     if (d.user) applyActive(d.active, d.user.balance);
+    // a hard refresh landing directly on a login-gated page (referral,
+    // rewards, stats, settings) renders once via route() above BEFORE this
+    // /api/me fetch resolves, so it shows the signed-out state even when
+    // the session is valid - each of these bails out early if `me` isn't
+    // set yet and nothing re-renders them once it is. Re-render whichever
+    // one is actually on screen now that login state is known.
+    renderReferral(); renderRewards(); renderStats(); renderSettings();
   } catch {}
 })();
 

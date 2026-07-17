@@ -18,7 +18,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/style.css">
+<!-- bump ?v= on deploys that change css/js - players' browsers cache these
+     hard, and a stale stylesheet against new markup renders broken layouts -->
+<link rel="stylesheet" href="/css/style.css?v=3">
 <link rel="icon" href="/img/donut.svg" type="image/svg+xml">
 <script type="application/ld+json">
 {
@@ -49,6 +51,7 @@
     <a href="#/" data-nav="home"><img class="nav-ico" src="/img/items/grass_block.png" alt="Home">Home</a>
     <a href="#/cases" data-nav="cases"><img class="nav-ico" src="/img/items/barrel.png" alt="Cases">Cases</a>
     <a href="#/mines" data-nav="mines"><img class="nav-ico" src="/img/items/tnt.png" alt="Mines">Mines</a>
+    <a href="#/roulette" data-nav="roulette"><img class="nav-ico" src="/img/items/redstone_block.png" alt="Block Roulette">Block Roulette</a>
     <a href="#/towers" data-nav="towers"><img class="nav-ico" src="/img/items/ladder.png" alt="Towers">Towers</a>
     <a href="#/coinflip" data-nav="coinflip"><img class="nav-ico" src="/img/items/gold_nugget.png" alt="Coinflip">Coinflip</a>
     <a href="#/blackjack" data-nav="blackjack"><img class="nav-ico" src="/img/items/filled_map.png" alt="Blackjack">Blackjack</a>
@@ -61,7 +64,7 @@
     <a href="#/rewards" data-nav="rewards"><img class="nav-ico" src="/img/items/totem.png" alt="Rewards">Rewards</a>
     <a href="#/leaderboard" data-nav="leaderboard"><img class="nav-ico" src="/img/items/diamond.png" alt="Leaderboard">Leaderboard</a>
     <a href="#/daily" data-nav="daily"><img class="nav-ico" src="/img/items/golden_apple.png" alt="Daily Case">Daily Case</a>
-    <a href="#/fair" data-nav="fair"><img class="nav-ico" src="/img/items/writable_book.png" alt="Fairness">Fairness</a>
+    <a href="#/referral" data-nav="referral"><img class="nav-ico" src="/img/items/emerald.png" alt="Referral">Referral</a>
   </nav>
 
   <div class="side-foot">
@@ -83,6 +86,7 @@
       </span>
       <button class="btn btn-green btn-small" id="wallet-deposit-btn">Deposit</button>
     </div>
+    <button class="btn btn-ghost btn-small hidden" id="referral-btn">Referral</button>
     <button class="btn btn-gold btn-small hidden" id="rewards-btn">Rewards</button>
     <div id="auth-buttons">
       <button class="btn btn-green" data-modal="link">⛏ Link Minecraft</button>
@@ -94,6 +98,7 @@
       <div class="profile-dropdown hidden" id="profile-dropdown">
         <div class="profile-dropdown-name" id="username-label"></div>
         <button class="profile-dropdown-item" id="dd-rewards-btn">Rewards</button>
+        <button class="profile-dropdown-item" id="dd-referral-btn">Referral</button>
         <button class="profile-dropdown-item" id="dd-stats-btn">Stats</button>
         <button class="profile-dropdown-item" id="dd-settings-btn">Settings</button>
       </div>
@@ -108,7 +113,7 @@
       <div class="hero-copy">
         <p class="hero-kicker">the #1 donutsmp casino</p>
         <h1>Donut SMP Gambling & Casino</h1>
-        <p class="hero-sub">The premier Donut SMP betting platform. Seven games, zero trust required — every roll is provably fair
+        <p class="hero-sub">The premier Donut SMP betting platform. Eight games, zero trust required — every roll is provably fair
           and settled on our servers. No signup needed: pay the bot in-game and start mining.</p>
         <div class="hero-actions">
           <a class="btn btn-green btn-big" href="#/cases">Open a case</a>
@@ -126,6 +131,16 @@
         <div class="sprinkle s3"></div><div class="sprinkle s4"></div>
       </div>
     </div>
+
+    <a class="new-game-banner" href="#/roulette">
+      <span class="new-game-tag">New Game</span>
+      <img class="new-game-art" src="/img/items/redstone_block.png" alt="Block Roulette">
+      <div class="new-game-copy">
+        <strong>Block Roulette</strong>
+        <span>One shared round, everyone bets in. Red or Purple pay 2×, Gold pays 14×.</span>
+      </div>
+      <span class="btn btn-green new-game-cta">Play now →</span>
+    </a>
 
     <h2 class="section-title">Pick your poison</h2>
     <div class="game-grid">
@@ -156,6 +171,10 @@
       <a class="game-card" href="#/chicken">
         <div class="game-art art-chicken"><img class="pix" src="/img/items/chicken.png" alt="Chicken game icon"></div>
         <div class="game-info"><strong>Chicken</strong><span>cross the lava, don't fry</span></div>
+      </a>
+      <a class="game-card" href="#/roulette">
+        <div class="game-art art-roulette"><img class="pix" src="/img/items/redstone_block.png" alt="Block Roulette game icon"></div>
+        <div class="game-info"><strong>Block Roulette</strong><span>red, purple, or gold — pick a block</span></div>
       </a>
     </div>
 
@@ -360,6 +379,44 @@
     </div>
   </section>
 
+  <!-- ======== BLOCK ROULETTE ======== -->
+  <section class="page hidden" data-page="roulette">
+    <div class="roul-wrap">
+      <!-- recents, countdown, reel and bet amount all live in ONE connected
+           panel (like the reference), not floating separately on the page -->
+      <div class="roul-panel">
+        <div class="roul-top-row">
+          <div class="roul-recent" id="roul-recent"></div>
+          <a class="btn btn-ghost btn-small roul-fairness-link" href="#/fair">Fairness</a>
+        </div>
+        <div class="roul-phase-row">
+          <span class="roul-phase" id="roul-phase">Loading…</span>
+          <span class="roul-timer" id="roul-timer"></span>
+        </div>
+        <div class="roul-reel-block">
+          <div class="reel-window roul-reel-window">
+            <div class="reel" id="roul-reel"></div>
+            <div class="reel-needle roul-needle-top"></div>
+            <div class="reel-needle roul-needle-bottom"></div>
+          </div>
+        </div>
+        <div class="roul-amount-row">
+          <label class="field roul-amount-field"><span>Bet amount</span>
+            <div class="amount-row">
+              <input type="text" id="roul-amount" value="10K" placeholder="e.g. 500M" autocomplete="off">
+              <button class="btn btn-tiny" data-half="roul-amount">½</button>
+              <button class="btn btn-tiny" data-double="roul-amount">2×</button>
+              <button class="btn btn-tiny" data-max="roul-amount">Max</button>
+            </div>
+          </label>
+        </div>
+      </div>
+      <div class="roul-mybet hidden" id="roul-mybet"></div>
+
+      <div class="roul-color-cols" id="roul-color-cols"></div>
+    </div>
+  </section>
+
   <!-- ======== DAILY CASE ======== -->
   <section class="page hidden" data-page="daily">
     <div class="game-layout">
@@ -376,8 +433,9 @@
           <div class="reel" id="daily-reel"></div>
           <div class="reel-needle"></div>
         </div>
-        <div class="loot-grid" id="daily-loot"></div>
         <p class="stage-msg" id="daily-msg">Come back every day. The star is real, someone will hit it.</p>
+        <div class="daily-drops-divider"><span>Possible drops</span></div>
+        <div class="loot-grid" id="daily-loot"></div>
       </div>
     </div>
   </section>
@@ -393,6 +451,7 @@
       </div>
 
       <div id="rw-panel-rakeback" class="rw-panel">
+        <p class="hint rw-blurb">Claim instant rakeback with a small % of all bets.</p>
         <div class="rw-rb-grid" id="rw-rb-grid"></div>
       </div>
 
@@ -407,8 +466,70 @@
             <span id="rw-level-next">Level 1</span>
           </div>
         </div>
+        <h3 class="history-head">Milestone rewards</h3>
         <div class="rw-milestones" id="rw-milestones"></div>
       </div>
+    </div>
+  </section>
+
+  <!-- ======== REFERRAL ======== -->
+  <section class="page hidden" data-page="referral">
+    <h2 class="section-title">Referral</h2>
+    <p id="referral-signin" class="hint">Pay a DonutWager bot in-game to link your account, then set up your referral link here.</p>
+    <div id="referral-body" class="hidden">
+      <div class="ref-code-row">
+        <div class="ref-code-box">
+          <span class="ref-label">Your referral code</span>
+          <div class="ref-code-edit">
+            <code id="ref-code-text">—</code>
+            <button class="btn btn-ghost btn-tiny copy-btn" data-copy="ref-code-text" title="Copy code">⧉</button>
+            <button class="btn btn-ghost btn-tiny" id="ref-code-edit-btn" title="Set a custom code">✎</button>
+          </div>
+        </div>
+        <div class="ref-code-box">
+          <span class="ref-label">Your referral link</span>
+          <div class="ref-code-edit">
+            <code id="ref-link-text">—</code>
+            <button class="btn btn-ghost btn-tiny copy-btn" data-copy="ref-link-text" title="Copy link">⧉</button>
+          </div>
+        </div>
+      </div>
+      <div class="ref-edit-row hidden" id="ref-edit-row">
+        <input type="text" id="ref-code-input" placeholder="new code (3-16 letters/numbers)" maxlength="16">
+        <button class="btn btn-green btn-small" id="ref-code-save-btn">Save</button>
+      </div>
+
+      <div class="ref-code-box ref-enter-box hidden" id="ref-enter-box">
+        <span class="ref-label">Were you referred by someone?</span>
+        <div class="ref-code-edit">
+          <input type="text" id="ref-enter-input" placeholder="enter their referral code" maxlength="16">
+          <button class="btn btn-green btn-small" id="ref-enter-btn">Apply</button>
+        </div>
+      </div>
+
+      <div class="ref-blurb-row">
+        <div class="ref-blurb-card">
+          <img src="/img/items/emerald.png" alt="">
+          <p>Share your link. Anyone who links their Minecraft account through it becomes your referral — no cost to them, ever.</p>
+        </div>
+        <div class="ref-blurb-card">
+          <img src="/img/items/gold_nugget.png" alt="">
+          <p>You earn <b id="ref-rate-text">0.1%</b> of everything they wager, for as long as they play. It adds up on its own.</p>
+        </div>
+      </div>
+
+      <div class="stats-cards">
+        <div class="stat-card"><span>Referred users</span><b id="ref-count">0</b></div>
+        <div class="stat-card"><span>Total earned</span><b class="coin" id="ref-total-earned">0</b></div>
+        <div class="stat-card"><span>Claimable</span><b class="coin" id="ref-claimable">0</b></div>
+      </div>
+      <button class="btn btn-green btn-block ref-claim-btn" id="ref-claim-btn">Claim referral earnings</button>
+
+      <h3 class="history-head">Your referrals</h3>
+      <table class="feed-table" id="ref-users-table">
+        <thead><tr><th>Player</th><th>Wagered</th><th>Earned</th><th>Joined</th></tr></thead>
+        <tbody></tbody>
+      </table>
     </div>
   </section>
 
@@ -464,7 +585,22 @@
 
   <!-- ======== LEADERBOARD ======== -->
   <section class="page hidden" data-page="leaderboard">
-    <h2 class="section-title">Top wagerers</h2>
+    <div class="lb-header">
+      <h2 class="section-title">Top wagerers</h2>
+      <div class="lb-countdown" id="lb-countdown">
+        <span class="lb-countdown-label">Race ends in</span>
+        <div class="lb-countdown-clock" id="lb-countdown-clock">
+          <span class="lb-cd-seg"><b id="lb-cd-d">00</b><small>d</small></span>
+          <span class="lb-cd-sep">:</span>
+          <span class="lb-cd-seg"><b id="lb-cd-h">00</b><small>h</small></span>
+          <span class="lb-cd-sep">:</span>
+          <span class="lb-cd-seg"><b id="lb-cd-m">00</b><small>m</small></span>
+          <span class="lb-cd-sep">:</span>
+          <span class="lb-cd-seg"><b id="lb-cd-s">00</b><small>s</small></span>
+        </div>
+      </div>
+    </div>
+    <p class="hint lb-race-hint">Only Donuts wagered since the race began count toward these ranks.</p>
     <div class="lb-podium" id="lb-podium"></div>
     <ol class="lb-list" id="lb-list"></ol>
   </section>
@@ -743,6 +879,12 @@
       </div>
       <h3 id="up-name"></h3>
       <span class="up-level-pill" id="up-level"></span>
+      <button class="btn btn-gold btn-small hidden" id="up-tip-btn">Tip Player</button>
+      <div class="up-tip-row hidden" id="up-tip-row">
+        <input type="text" id="up-tip-amount" placeholder="e.g. 10M">
+        <button class="btn btn-green btn-small" id="up-tip-send-btn">Send</button>
+      </div>
+      <p class="form-error" id="up-tip-error"></p>
     </div>
     <div class="stats-cards" id="up-cards"></div>
     <h3 class="history-head" id="up-bets-head">Recent bets</h3>
@@ -758,6 +900,6 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="/js/app.js"></script>
+<script src="/js/app.js?v=3"></script>
 </body>
 </html>
